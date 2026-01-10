@@ -1,6 +1,6 @@
 # Mandu
 
-Your dev team. Wrapped in one.
+Your dev team. All wrapped together.
 
 A multi-agent orchestration system using Claude Agent SDK with MongoDB for coordination.
 

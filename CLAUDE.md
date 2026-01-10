@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Mandu is a multi-agent orchestration system that simulates a development team using Claude Agent SDK with MongoDB for coordination. The tagline: "Your dev team. Wrapped in one."
+Mandu is a multi-agent orchestration system that simulates a development team using Claude Agent SDK with MongoDB for coordination. The tagline: "Your dev team. All wrapped together."
 
 ## Development Commands
 

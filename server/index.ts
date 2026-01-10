@@ -14,7 +14,7 @@ import { WorkerAgentManager } from './orchestrator/workerAgent.js';
 import { SessionManager } from './sessionManager.js';
 import { readSessionHistory } from './sessionHistory.js';
 import type { ServerMessage } from '../shared/types.js';
-import type { Task } from './db/models.js';
+import type { Task, Gate } from './db/models.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -240,6 +240,40 @@ Review the work and decide on next steps. You can:
               await client.emManager.sendMessageToEM(event.projectId, notificationMessage);
             } catch (error) {
               console.error('Failed to notify EM of task completion:', error);
+            }
+            break; // Only notify once
+          }
+        }
+      }
+    }
+
+    // Notify EM when a gate is resolved (approved or changes requested)
+    if (event.collection === 'gates' && event.operation === 'update' && event.document) {
+      const gate = event.document as Gate;
+      // Only notify for resolved gates (not pending)
+      if (gate.status !== 'pending' && event.projectId) {
+        for (const client of clients) {
+          if (client.subscribedProjects.has(event.projectId)) {
+            try {
+              const gateTitle = gate.title || 'Unknown gate';
+              const gateDescription = gate.description || 'No description';
+              const reviewerComment = gate.reviewerComment || 'No comment provided';
+              const statusText = gate.status === 'approved' ? '✅ APPROVED' : '⚠️ CHANGES REQUESTED';
+
+              const notificationMessage = `Gate resolved:
+**Gate**: ${gateTitle}
+**Status**: ${statusText}
+**Description**: ${gateDescription}
+**Reviewer Comment**: ${reviewerComment}
+
+${gate.status === 'approved'
+  ? 'The gate was approved. You can now proceed with the next steps in the workflow.'
+  : 'Changes were requested. Review the feedback and create appropriate follow-up tasks to address the concerns.'}`;
+
+              console.log(`Notifying EM for project ${event.projectId} about gate resolution: ${gateTitle} - ${gate.status}`);
+              await client.emManager.sendMessageToEM(event.projectId, notificationMessage);
+            } catch (error) {
+              console.error('Failed to notify EM of gate resolution:', error);
             }
             break; // Only notify once
           }
