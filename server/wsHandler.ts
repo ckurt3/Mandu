@@ -296,7 +296,7 @@ export function createWsHandler(ws: WebSocket): WsClient {
           try {
             // Default to current working directory if '/' or empty is passed
             const safeCwd = (!message.cwd || message.cwd === '/') ? process.cwd() : message.cwd;
-            const project = await createProject(message.name, message.description, safeCwd);
+            const project = await createProject(message.name, message.description, safeCwd, message.linearIssueKey);
             const projectId = project._id!.toString();
             const emAgentId = await emManager.startEMForProject(projectId);
             subscribedProjects.add(projectId);
@@ -352,13 +352,14 @@ export function createWsHandler(ws: WebSocket): WsClient {
     }
   });
 
-  async function createProject(name: string, description: string, cwd: string) {
+  async function createProject(name: string, description: string, cwd: string, linearIssueKey?: string) {
     const collections = getCollections();
     const now = new Date();
     const project = {
       name,
       description,
       cwd,
+      linearIssueKey,
       status: 'active' as const,
       createdAt: now,
       updatedAt: now,

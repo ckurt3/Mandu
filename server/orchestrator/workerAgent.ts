@@ -16,6 +16,7 @@ const AGENT_PROMPTS: Record<AgentType, string> = {
   developer: readFileSync(join(__dirname, '../agents/developer.md'), 'utf-8'),
   qa: readFileSync(join(__dirname, '../agents/qa.md'), 'utf-8'),
   reviewer: readFileSync(join(__dirname, '../agents/reviewer.md'), 'utf-8'),
+  'release-manager': readFileSync(join(__dirname, '../agents/release-manager.md'), 'utf-8'),
 };
 
 export class WorkerAgentManager {
@@ -39,83 +40,68 @@ export class WorkerAgentManager {
       throw new Error('EM tasks are handled by EMAgentManager');
     }
 
-    const collections = getCollections();
-    // task.projectId may be a string (from change stream) or ObjectId
-    const projectId = typeof task.projectId === 'string'
-      ? new ObjectId(task.projectId)
-      : task.projectId;
-    const project = await collections.projects.findOne({
-      _id: projectId,
-    });
-
-    if (!project) {
-      throw new Error(`Project ${task.projectId} not found`);
-    }
-
-    // Create worker agent session
+    // Create agent ID and add to map immediately to prevent race conditions
     const agentId = `${task.assignedAgent}-${taskId}`;
-    const projectIdStr = task.projectId.toString();
-    this.sessionManager.createSession(agentId, project.cwd, projectIdStr);
-
-    // Update task with agent session ID
-    // task._id may be a string (from change stream) or ObjectId
-    const taskObjectId = typeof task._id === 'string'
-      ? new ObjectId(task._id)
-      : task._id;
-    await collections.tasks.updateOne(
-      { _id: taskObjectId },
-      {
-        $set: {
-          agentSessionId: agentId,
-          status: 'in_progress',
-          updatedAt: new Date(),
-        },
-      }
-    );
-
     this.activeWorkers.set(taskId, agentId);
 
-    // Initialize worker with system prompt and task
-    await this.initializeWorker(agentId, task);
+    try {
+      const collections = getCollections();
+      // task.projectId may be a string (from change stream) or ObjectId
+      const projectId = typeof task.projectId === 'string'
+        ? new ObjectId(task.projectId)
+        : task.projectId;
+      const project = await collections.projects.findOne({
+        _id: projectId,
+      });
 
-    return agentId;
+      if (!project) {
+        this.activeWorkers.delete(taskId);
+        throw new Error(`Project ${task.projectId} not found`);
+      }
+
+      // Create worker agent session
+      const projectIdStr = task.projectId.toString();
+      this.sessionManager.createSession(agentId, project.cwd, projectIdStr);
+
+      // Update task with agent session ID
+      // task._id may be a string (from change stream) or ObjectId
+      const taskObjectId = typeof task._id === 'string'
+        ? new ObjectId(task._id)
+        : task._id;
+      await collections.tasks.updateOne(
+        { _id: taskObjectId },
+        {
+          $set: {
+            agentSessionId: agentId,
+            status: 'in_progress',
+            updatedAt: new Date(),
+          },
+        }
+      );
+
+      // Initialize worker with system prompt and task
+      await this.initializeWorker(agentId, task);
+
+      return agentId;
+    } catch (error) {
+      this.activeWorkers.delete(taskId);
+      throw error;
+    }
   }
 
   private async initializeWorker(agentId: string, task: Task): Promise<void> {
     console.log(`[WorkerAgent] Initializing worker ${agentId} for task: ${task.title}`);
     const systemPrompt = AGENT_PROMPTS[task.assignedAgent];
+    const taskId = task._id!.toString();
 
-    // Get related artifacts for context
-    const collections = getCollections();
-    // projectId may be string (from change stream) or ObjectId
-    const projectIdForQuery = typeof task.projectId === 'string'
-      ? new ObjectId(task.projectId)
-      : task.projectId;
-    const artifacts = await collections.artifacts
-      .find({ projectId: projectIdForQuery })
-      .toArray();
-
-    const artifactSummary = artifacts.length > 0
-      ? artifacts.map(a => `- ${a.name} (${a.type}): ${a._id}`).join('\n')
-      : 'No artifacts yet.';
-
+    // Pass only task ID - agent will query MongoDB for full context
     const initMessage = `${systemPrompt}
 
 ---
 
-## Your Task
+Your task ID is: ${taskId}
 
-**Task ID**: ${task._id}
-**Title**: ${task.title}
-**Description**: ${task.description}
-${task.context ? `**Additional Context**: ${task.context}` : ''}
-
-## Available Artifacts
-${artifactSummary}
-
----
-
-Please complete this task. When done, use \`mandu__complete_task\` with the task ID and a summary of what you accomplished.`;
+Query the tasks collection to get your task details, then complete the work.`;
 
     try {
       await this.sessionManager.sendMessage(agentId, initMessage);

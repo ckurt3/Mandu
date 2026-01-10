@@ -28,73 +28,86 @@ export class EMAgentManager {
       return this.activeEMs.get(projectId)!;
     }
 
-    const collections = getCollections();
-    const project = await collections.projects.findOne({
-      _id: new ObjectId(projectId),
-    });
-
-    if (!project) {
-      throw new Error(`Project ${projectId} not found`);
-    }
-
     const agentId = `em-${projectId}`;
 
-    // Check if we have a saved session to resume
-    const savedSession = await collections.agentSessions.findOne({ agentId });
-    const existingSessionId = savedSession?.sessionId;
-
-    // EM agent is restricted to only mandu__* MCP tools
-    // This prevents the EM from reading files, running commands, etc.
-    const emAllowedTools = [
-      'mcp__mandu__create_task',
-      'mcp__mandu__update_task',
-      'mcp__mandu__complete_task',
-      'mcp__mandu__get_task',
-      'mcp__mandu__list_tasks',
-      'mcp__mandu__create_artifact',
-      'mcp__mandu__update_artifact',
-      'mcp__mandu__get_artifact',
-      'mcp__mandu__list_artifacts',
-      'mcp__mandu__create_gate',
-      'mcp__mandu__get_gate',
-      'mcp__mandu__list_pending_gates',
-      'mcp__mandu__get_project_status',
-    ];
-
-    // Create or resume EM agent session with tool restrictions
-    this.sessionManager.createSession(agentId, project.cwd, projectId, existingSessionId, {
-      allowedTools: emAllowedTools,
-      systemPrompt: EM_SYSTEM_PROMPT,
-    });
-
-    // Update project with EM agent ID
-    await collections.projects.updateOne(
-      { _id: new ObjectId(projectId) },
-      { $set: { emAgentId: agentId, updatedAt: new Date() } }
-    );
-
+    // Add to map immediately to prevent race conditions
     this.activeEMs.set(projectId, agentId);
 
-    // Only initialize if this is a new session (no existing sessionId)
-    if (!existingSessionId) {
-      await this.initializeEM(agentId, project);
-    }
+    try {
+      const collections = getCollections();
+      const project = await collections.projects.findOne({
+        _id: new ObjectId(projectId),
+      });
 
-    return agentId;
+      if (!project) {
+        this.activeEMs.delete(projectId);
+        throw new Error(`Project ${projectId} not found`);
+      }
+
+      // Check if we have a saved session to resume
+      const savedSession = await collections.agentSessions.findOne({ agentId });
+      const existingSessionId = savedSession?.sessionId;
+
+      // EM agent is restricted to MongoDB and Linear MCP tools only
+      // This prevents the EM from reading files, running commands, etc.
+      // The EM orchestrates by creating tasks/gates/artifacts in the database
+      // and can fetch issue details from Linear
+      const emAllowedTools = [
+        'mcp__mongodb__find',
+        'mcp__mongodb__insert-many',
+        'mcp__mongodb__update-many',
+        'mcp__mongodb__aggregate',
+        'mcp__mongodb__count',
+        'mcp__mongodb__collection-schema',
+        'mcp__linear__get_issue',
+        'mcp__linear__list_issues',
+      ];
+
+      // Create or resume EM agent session with tool restrictions
+      this.sessionManager.createSession(agentId, project.cwd, projectId, existingSessionId, {
+        allowedTools: emAllowedTools,
+        systemPrompt: EM_SYSTEM_PROMPT,
+      });
+
+      // Update project with EM agent ID
+      await collections.projects.updateOne(
+        { _id: new ObjectId(projectId) },
+        { $set: { emAgentId: agentId, updatedAt: new Date() } }
+      );
+
+      // Only initialize if this is a new session (no existing sessionId)
+      if (!existingSessionId) {
+        await this.initializeEM(agentId, project);
+      }
+
+      return agentId;
+    } catch (error) {
+      this.activeEMs.delete(projectId);
+      throw error;
+    }
   }
 
   private async initializeEM(agentId: string, project: Project): Promise<void> {
-    const hasDescription = project.description && project.description.trim().length > 0;
+    const projectId = project._id!.toString();
 
-    // System prompt is now passed via SDK options, so we just send project context
-    const initMessage = `## Project: ${project.name}
-${hasDescription ? `Goal: ${project.description}` : ''}
-Working Directory: ${project.cwd}
+    // Check if project was created from a Linear issue
+    const linearIssueKey = (project as { linearIssueKey?: string }).linearIssueKey;
 
-${hasDescription
-  ? `Acknowledge the project goal briefly, then start planning. Create the first task (usually for PM to write a spec). Keep your response to 2-3 sentences.`
-  : `The user hasn't described what to build yet. Ask them briefly what they'd like to accomplish.`
-}`;
+    let initMessage: string;
+    if (linearIssueKey) {
+      // Project created from Linear issue - fetch details first
+      initMessage = `Your project ID is: ${projectId}
+
+This project was created from Linear issue: ${linearIssueKey}
+
+First, use the Linear MCP tool (mcp__linear__get_issue) to fetch the issue details for "${linearIssueKey}".
+Then query the projects collection to update your understanding, and start planning based on the Linear issue requirements.`;
+    } else {
+      // Regular project - query for details
+      initMessage = `Your project ID is: ${projectId}
+
+Query the projects collection to get project details, then start planning.`;
+    }
 
     await this.sessionManager.sendMessage(agentId, initMessage);
   }

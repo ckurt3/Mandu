@@ -36,11 +36,12 @@ Agent prompts are stored as markdown files in `server/agents/` (em.md, pm.md, ar
 
 ### Key Design Patterns
 
-1. **Agent Delegation** - EM creates tasks via MCP tools, worker agents execute independently
+1. **Agent Delegation** - EM creates tasks via MongoDB MCP, worker agents execute independently
 2. **Real-Time Sync** - MongoDB change streams + WebSocket broadcast to connected clients
 3. **Session Persistence** - Claude SDK sessions saved to MongoDB for agent resumption
-4. **MCP Tools** - Agents interact with database via MCP tools defined in `server/mcp/manduTools.ts`
+4. **MongoDB MCP** - Agents interact with database directly via MongoDB MCP tools (insert-many, find, update-many)
 5. **Project Scoping** - All work happens within a project context; clients subscribe to project updates
+6. **Change Stream Triggers** - When tasks are inserted with status "pending", worker agents are automatically spawned
 
 ### Tech Stack
 
@@ -55,9 +56,8 @@ Agent prompts are stored as markdown files in `server/agents/` (em.md, pm.md, ar
   - `agents/` - Agent system prompts (markdown files)
   - `db/` - MongoDB connection, models, change stream watcher
   - `orchestrator/` - EM and worker agent implementations
-  - `mcp/` - MCP tools for agent database access
 - `client/` - React frontend
-  - `components/` - UI components (AgentPanel, GateCard, TaskCard, etc.)
+  - `components/` - UI components (TeamChat, GateCard, etc.)
   - `hooks/useWebSocket.ts` - WebSocket client connection
 - `shared/types.ts` - WebSocket message types shared between client/server
 
@@ -80,21 +80,20 @@ WebSocket messages defined in `shared/types.ts`:
 When running as an agent in this system:
 
 ### Engineering Manager (EM)
-- ONLY use `mandu__*` MCP tools - never read files or run shell commands directly
-- Delegate ALL implementation work to specialist agents (PM, Architect, Developer, QA, Reviewer)
+- ONLY use `mcp__mongodb__*` tools - never read files or run shell commands directly
+- Insert tasks into `tasks` collection to delegate work (workers spawn automatically)
+- Insert gates into `gates` collection to request human approval
 - Your job is orchestration, not execution
-- When tasks complete, review results and create follow-up tasks or approval gates
 
 ### Worker Agents (PM, Architect, Developer, QA, Reviewer)
-- Complete your assigned task and call `mandu__complete_task` when done
-- Create artifacts for any deliverables (specs, designs, code changes, test reports)
+- Complete your assigned task and update its status to "completed" via MongoDB
+- Insert artifacts into `artifacts` collection for deliverables
 - Stay focused on your assigned task scope
-- Use `mandu__create_artifact` to store your work output
 
 ### All Agents
 - Keep responses concise and action-oriented
 - Report progress clearly
-- Create approval gates (`mandu__create_gate`) when human review is needed
+- Use MongoDB MCP tools (find, insert-many, update-many) for all database operations
 
 ## Setup
 

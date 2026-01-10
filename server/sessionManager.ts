@@ -1,6 +1,21 @@
-import { query, type SDKMessage, type McpSdkServerConfigWithInstance } from '@anthropic-ai/claude-agent-sdk';
+import { query, type SDKMessage, type McpServerConfig } from '@anthropic-ai/claude-agent-sdk';
+import { readFileSync, existsSync } from 'fs';
+import { join } from 'path';
 import type { AgentStatus } from '../shared/types.js';
-import { createManduMcpServer } from './mcp/manduTools.js';
+
+// Load MCP servers config from project .mcp.json
+function loadMcpConfig(cwd: string): Record<string, McpServerConfig> | undefined {
+  const mcpConfigPath = join(cwd, '.mcp.json');
+  if (existsSync(mcpConfigPath)) {
+    try {
+      const config = JSON.parse(readFileSync(mcpConfigPath, 'utf-8'));
+      return config.mcpServers as Record<string, McpServerConfig>;
+    } catch (err) {
+      console.error('Failed to load .mcp.json:', err);
+    }
+  }
+  return undefined;
+}
 
 export interface AgentSession {
   id: string;
@@ -9,7 +24,6 @@ export interface AgentSession {
   queryInstance: AsyncGenerator<SDKMessage, void, unknown> | null;
   sessionId?: string;
   projectId?: string;
-  mcpServer?: McpSdkServerConfigWithInstance;
   allowedTools?: string[];
   systemPrompt?: string;
 }
@@ -65,7 +79,6 @@ export class SessionManager {
       queryInstance: null,
       sessionId: existingSessionId,
       projectId,
-      mcpServer: projectId ? createManduMcpServer(projectId) : undefined,
       allowedTools: options?.allowedTools,
       systemPrompt: options?.systemPrompt,
     };
@@ -94,13 +107,6 @@ export class SessionManager {
         },
       };
 
-      // Add MCP server for project-bound sessions
-      if (session.mcpServer) {
-        queryOptions.options!.mcpServers = {
-          mandu: session.mcpServer,
-        };
-      }
-
       // Resume session if we have a previous session ID
       if (session.sessionId) {
         queryOptions.options!.resume = session.sessionId;
@@ -116,14 +122,21 @@ export class SessionManager {
         queryOptions.options!.systemPrompt = session.systemPrompt;
       }
 
+      // Load and add MCP servers from project config
+      const mcpServers = loadMcpConfig(session.cwd);
+      if (mcpServers) {
+        queryOptions.options!.mcpServers = mcpServers;
+      }
+
       console.log(`[${agentId}] Starting query with options:`, JSON.stringify({
         prompt: message.slice(0, 100) + '...',
         cwd: queryOptions.options?.cwd,
         permissionMode: queryOptions.options?.permissionMode,
-        hasMcpServer: !!queryOptions.options?.mcpServers,
         resumeSessionId: queryOptions.options?.resume,
         allowedTools: queryOptions.options?.allowedTools,
         hasSystemPrompt: !!queryOptions.options?.systemPrompt,
+        hasMcpServers: !!mcpServers,
+        mcpServerNames: mcpServers ? Object.keys(mcpServers) : [],
       }));
 
       const queryInstance = query(queryOptions);

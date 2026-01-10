@@ -79,7 +79,7 @@ export function GateCard({ gate, artifacts, onResolve }: GateCardProps) {
 
   return (
     <>
-      <article className={`bg-bg-elevated border rounded-xl overflow-hidden animate-slide-up ${styles.border}`}>
+      <article className={`bg-bg-elevated border rounded-xl animate-slide-up ${styles.border}`}>
         {/* Header */}
         <header className="px-4 py-3 bg-gradient-to-br from-orange/5 to-transparent border-b border-border">
           <div className="flex items-center gap-2">
@@ -156,10 +156,12 @@ export function GateCard({ gate, artifacts, onResolve }: GateCardProps) {
                 <span>Approve</span>
               </button>
               <button
-                className="flex items-center justify-center gap-2 py-3 px-5 rounded-lg font-bold text-sm bg-golden/15 text-golden hover:bg-golden/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                className="flex items-center justify-center gap-2 py-3 px-5 rounded-lg font-bold text-sm bg-bg-hover border border-border text-text-secondary hover:bg-golden/15 hover:text-golden hover:border-golden/30 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                 onClick={() => handleAction('changes_requested')}
                 disabled={!comment.trim()}
+                title={!comment.trim() ? 'Add feedback to request changes' : ''}
               >
+                <span>↻</span>
                 <span>Request Changes</span>
               </button>
             </div>
@@ -254,13 +256,15 @@ export function GateCard({ gate, artifacts, onResolve }: GateCardProps) {
                     <span>Approve</span>
                   </button>
                   <button
-                    className="flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg font-bold text-sm bg-golden/15 text-golden hover:bg-golden/25 transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+                    className="flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg font-bold text-sm bg-bg-hover border border-border text-text-secondary hover:bg-golden/15 hover:text-golden hover:border-golden/30 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                     onClick={() => {
                       handleAction('changes_requested');
                       setModalArtifact(null);
                     }}
                     disabled={!comment.trim()}
+                    title={!comment.trim() ? 'Add feedback to request changes' : ''}
                   >
+                    <span>↻</span>
                     <span>Request Changes</span>
                   </button>
                 </div>

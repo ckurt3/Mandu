@@ -1,7 +1,7 @@
 import { useCallback, useState, useEffect, useMemo } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
-import { AgentCard } from './components/AgentCard';
-import { GateCard } from './components/GateCard';
+import { TeamChat } from './components/TeamChat';
+import { SlideMenu } from './components/SlideMenu';
 import type { AgentState } from './types';
 import './styles.css';
 
@@ -16,15 +16,23 @@ function App() {
     createProject,
     subscribeToProject,
     sendProjectMessage,
+    addLocalMessage,
     resolveGate,
     getAgent,
   } = useWebSocket();
 
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [showNewProjectModal, setShowNewProjectModal] = useState(false);
+  const [projectMode, setProjectMode] = useState<'manual' | 'linear'>('manual');
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
   const [newProjectCwd, setNewProjectCwd] = useState('/');
+  const [linearIssueKey, setLinearIssueKey] = useState('');
+  const [isMenuOpen, setIsMenuOpen] = useState(false);
+
+  // Menu handlers
+  const openMenu = useCallback(() => setIsMenuOpen(true), []);
+  const closeMenu = useCallback(() => setIsMenuOpen(false), []);
 
   // Auto-select first project
   useEffect(() => {
@@ -41,13 +49,27 @@ function App() {
   }, [subscribeToProject]);
 
   const handleCreateProject = useCallback(() => {
-    if (newProjectName.trim()) {
-      createProject(newProjectName.trim(), newProjectDesc.trim(), newProjectCwd.trim() || '/');
-      setNewProjectName('');
-      setNewProjectDesc('');
-      setShowNewProjectModal(false);
+    const cwd = newProjectCwd.trim() || '/';
+
+    if (projectMode === 'linear') {
+      if (linearIssueKey.trim()) {
+        // For Linear mode, use issue key as name
+        createProject(linearIssueKey.trim(), '', cwd, linearIssueKey.trim());
+        setLinearIssueKey('');
+        setNewProjectCwd('/');
+        setProjectMode('manual');
+        setShowNewProjectModal(false);
+      }
+    } else {
+      if (newProjectName.trim()) {
+        createProject(newProjectName.trim(), newProjectDesc.trim(), cwd);
+        setNewProjectName('');
+        setNewProjectDesc('');
+        setNewProjectCwd('/');
+        setShowNewProjectModal(false);
+      }
     }
-  }, [createProject, newProjectName, newProjectDesc, newProjectCwd]);
+  }, [createProject, projectMode, newProjectName, newProjectDesc, newProjectCwd, linearIssueKey]);
 
   const selectedProject = projects.find(p => p._id === selectedProjectId);
   const projectTasks = tasks.filter(t => t.projectId === selectedProjectId);
@@ -111,9 +133,9 @@ function App() {
   }, [selectedProject, projectTasks, agents, getAgent]);
 
   return (
-    <div className="min-h-screen flex flex-row bg-bg-primary">
-      {/* Sidebar - Projects */}
-      <div className="w-[280px] min-w-[280px] bg-bg-secondary border-r border-border flex flex-col h-screen sticky top-0">
+    <div className="h-screen flex flex-row bg-bg-primary overflow-hidden">
+      {/* Slide Menu with Sidebar Content */}
+      <SlideMenu isOpen={isMenuOpen} onOpen={openMenu} onClose={closeMenu}>
         {/* Brand Header */}
         <div className="p-5 border-b border-border bg-gradient-to-br from-orange/5 via-transparent to-transparent">
           <div className="flex items-center gap-3">
@@ -212,89 +234,25 @@ function App() {
             New Project
           </button>
         </div>
+      </SlideMenu>
 
-        {/* Task List for selected project */}
-        {selectedProject && projectTasks.length > 0 && (
-          <div className="border-t border-border p-3 max-h-[200px] overflow-y-auto">
-            <div className="flex items-center justify-between mb-3">
-              <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Tasks</span>
-              <span className="bg-bg-elevated text-text-secondary text-[11px] font-semibold px-2 py-0.5 rounded-md">
-                {projectTasks.length}
-              </span>
-            </div>
-
-            <div className="flex flex-col gap-1">
-              {projectTasks.slice(0, 5).map((task) => (
-                <div
-                  key={task._id}
-                  className="flex items-center gap-2.5 py-2 px-2 rounded-lg hover:bg-bg-hover/50 transition-colors"
-                >
-                  <div className={`
-                    w-2 h-2 rounded-full flex-shrink-0
-                    ${task.status === 'completed' ? 'bg-green' :
-                      task.status === 'in_progress' ? 'bg-orange animate-pulse' :
-                      task.status === 'cancelled' ? 'bg-red' : 'bg-text-muted'
-                    }
-                  `} />
-                  <div className="flex-1 min-w-0">
-                    <div className="text-[13px] text-text-primary truncate font-medium">{task.title}</div>
-                    <div className="text-[11px] text-text-muted uppercase tracking-wide">{task.assignedAgent}</div>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {projectTasks.length > 5 && (
-              <div className="text-[11px] text-text-muted text-center mt-2 py-1">
-                +{projectTasks.length - 5} more tasks
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Main Panel - Agent Cards */}
-      <main className="flex-1 flex flex-col min-h-screen overflow-hidden bg-gradient-to-br from-bg-primary via-bg-primary to-orange/[0.02]">
+      {/* Main Panel - Team Chat */}
+      <main className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-br from-bg-primary via-bg-primary to-orange/[0.02]">
         {selectedProject ? (
-          <div className="flex-1 flex flex-col min-h-0">
-            {/* Project Header */}
-            <div className="flex items-center justify-between p-5 border-b border-border bg-bg-secondary/40 backdrop-blur-sm">
-              <div>
-                <h2 className="text-lg font-bold text-text-primary">{selectedProject.name}</h2>
-                {selectedProject.description && (
-                  <p className="text-sm text-text-muted mt-0.5">{selectedProject.description}</p>
-                )}
-              </div>
-              <div className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-bg-elevated border border-border">
-                <span className="text-sm text-text-muted">
-                  {projectAgents.length} agent{projectAgents.length !== 1 ? 's' : ''}
-                </span>
-              </div>
-            </div>
-
-            {/* Agent Cards */}
-            <div className="flex-1 overflow-y-auto p-5 flex flex-col gap-4 min-h-0">
-              {projectAgents.length === 0 ? (
-                <div className="flex-1 flex flex-col items-center justify-center text-center">
-                  <div className="w-20 h-20 rounded-2xl bg-orange/10 border border-orange/20 flex items-center justify-center text-4xl mb-5 animate-bounce-slow">
-                    🥟
-                  </div>
-                  <h3 className="text-xl font-bold text-text-primary mb-2">Initializing agents...</h3>
-                  <p className="text-text-muted max-w-sm">Your Engineering Manager is getting ready to orchestrate the team</p>
-                </div>
-              ) : (
-                projectAgents.map(({ agent, type, isPrimary }) => (
-                  <AgentCard
-                    key={agent.id}
-                    agent={agent}
-                    agentType={type}
-                    onSendMessage={(message) => sendProjectMessage(selectedProject._id, message)}
-                    isPrimary={isPrimary}
-                  />
-                ))
-              )}
-            </div>
-          </div>
+          <TeamChat
+            agents={projectAgents.map(({ agent, type }) => ({ agent, type }))}
+            onSendMessage={(message) => sendProjectMessage(selectedProject._id, message)}
+            projectName={selectedProject.name}
+            gates={projectGates}
+            artifacts={projectArtifacts}
+            onResolveGate={(gateId, status, comment) => {
+              resolveGate(gateId, status, comment);
+              const gate = projectGates.find(g => g._id === gateId);
+              const statusText = status === 'approved' ? '✅ Approved' : '↻ Requested changes on';
+              const message = `${statusText} gate: **${gate?.title}**${comment ? `\n\n> ${comment}` : ''}`;
+              addLocalMessage(selectedProject._id, message);
+            }}
+          />
         ) : (
           /* Empty State - No Project Selected */
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
@@ -323,51 +281,6 @@ function App() {
         )}
       </main>
 
-      {/* Right Panel - Gates */}
-      {selectedProject && (
-        <aside className="w-[360px] min-w-[360px] bg-bg-secondary border-l border-border flex flex-col h-screen">
-          {/* Gates Header */}
-          <div className="p-4 border-b border-border flex items-center justify-between bg-gradient-to-r from-transparent to-orange/[0.03]">
-            <div className="flex items-center gap-2">
-              <span className="text-lg">🚧</span>
-              <h2 className="text-base font-bold text-text-primary">Approval Gates</h2>
-            </div>
-            {pendingGates.length > 0 && (
-              <span className="
-                bg-orange/15 text-orange text-xs font-bold px-2.5 py-1 rounded-lg
-                border border-orange/25 animate-pulse
-              ">
-                {pendingGates.length} pending
-              </span>
-            )}
-          </div>
-
-          {/* Gates List */}
-          <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4">
-            {projectGates.length === 0 ? (
-              <div className="flex-1 flex flex-col items-center justify-center text-center py-12">
-                <div className="w-16 h-16 rounded-2xl bg-bg-elevated border border-border flex items-center justify-center text-3xl mb-4">
-                  🚧
-                </div>
-                <p className="text-sm font-medium text-text-secondary mb-1">No gates yet</p>
-                <p className="text-xs text-text-muted max-w-[200px]">
-                  Gates appear when work needs your review and approval
-                </p>
-              </div>
-            ) : (
-              projectGates.map((gate) => (
-                <GateCard
-                  key={gate._id}
-                  gate={gate}
-                  artifacts={projectArtifacts}
-                  onResolve={resolveGate}
-                />
-              ))
-            )}
-          </div>
-        </aside>
-      )}
-
       {/* New Project Modal */}
       {showNewProjectModal && (
         <div
@@ -394,40 +307,94 @@ function App() {
               </button>
             </div>
 
+            {/* Mode Toggle */}
+            <div className="px-5 pt-5">
+              <div className="flex bg-bg-primary rounded-xl p-1 border border-border">
+                <button
+                  className={`
+                    flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all
+                    ${projectMode === 'manual'
+                      ? 'bg-orange/15 text-orange border border-orange/30'
+                      : 'text-text-muted hover:text-text-primary'
+                    }
+                  `}
+                  onClick={() => setProjectMode('manual')}
+                >
+                  From Scratch
+                </button>
+                <button
+                  className={`
+                    flex-1 py-2.5 px-4 rounded-lg text-sm font-semibold transition-all
+                    ${projectMode === 'linear'
+                      ? 'bg-[#5E6AD2]/15 text-[#5E6AD2] border border-[#5E6AD2]/30'
+                      : 'text-text-muted hover:text-text-primary'
+                    }
+                  `}
+                  onClick={() => setProjectMode('linear')}
+                >
+                  From Linear
+                </button>
+              </div>
+            </div>
+
             {/* Modal Body */}
             <div className="p-5 flex flex-col gap-5">
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-text-secondary">Project Name</label>
-                <input
-                  type="text"
-                  placeholder="e.g., User Authentication"
-                  value={newProjectName}
-                  onChange={(e) => setNewProjectName(e.target.value)}
-                  autoFocus
-                  className="
-                    w-full bg-bg-primary border border-border rounded-xl px-4 py-3
-                    text-text-primary placeholder:text-text-muted
-                    focus:outline-none focus:border-orange/60 focus:ring-2 focus:ring-orange/15
-                    transition-all
-                  "
-                />
-              </div>
+              {projectMode === 'linear' ? (
+                <>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-semibold text-text-secondary">Linear Issue</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., MDU-1"
+                      value={linearIssueKey}
+                      onChange={(e) => setLinearIssueKey(e.target.value.toUpperCase())}
+                      autoFocus
+                      className="
+                        w-full bg-bg-primary border border-border rounded-xl px-4 py-3
+                        text-text-primary placeholder:text-text-muted font-mono
+                        focus:outline-none focus:border-[#5E6AD2]/60 focus:ring-2 focus:ring-[#5E6AD2]/15
+                        transition-all uppercase
+                      "
+                    />
+                    <span className="text-xs text-text-muted">The EM will fetch issue details automatically</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-semibold text-text-secondary">Project Name</label>
+                    <input
+                      type="text"
+                      placeholder="e.g., User Authentication"
+                      value={newProjectName}
+                      onChange={(e) => setNewProjectName(e.target.value)}
+                      autoFocus
+                      className="
+                        w-full bg-bg-primary border border-border rounded-xl px-4 py-3
+                        text-text-primary placeholder:text-text-muted
+                        focus:outline-none focus:border-orange/60 focus:ring-2 focus:ring-orange/15
+                        transition-all
+                      "
+                    />
+                  </div>
 
-              <div className="flex flex-col gap-2">
-                <label className="text-sm font-semibold text-text-secondary">Description</label>
-                <textarea
-                  placeholder="What do you want to build?"
-                  value={newProjectDesc}
-                  onChange={(e) => setNewProjectDesc(e.target.value)}
-                  rows={3}
-                  className="
-                    w-full bg-bg-primary border border-border rounded-xl px-4 py-3
-                    text-text-primary placeholder:text-text-muted
-                    focus:outline-none focus:border-orange/60 focus:ring-2 focus:ring-orange/15
-                    transition-all resize-none
-                  "
-                />
-              </div>
+                  <div className="flex flex-col gap-2">
+                    <label className="text-sm font-semibold text-text-secondary">Description</label>
+                    <textarea
+                      placeholder="What do you want to build?"
+                      value={newProjectDesc}
+                      onChange={(e) => setNewProjectDesc(e.target.value)}
+                      rows={3}
+                      className="
+                        w-full bg-bg-primary border border-border rounded-xl px-4 py-3
+                        text-text-primary placeholder:text-text-muted
+                        focus:outline-none focus:border-orange/60 focus:ring-2 focus:ring-orange/15
+                        transition-all resize-none
+                      "
+                    />
+                  </div>
+                </>
+              )}
 
               <div className="flex flex-col gap-2">
                 <label className="text-sm font-semibold text-text-secondary">Working Directory</label>
@@ -436,12 +403,15 @@ function App() {
                   placeholder="/path/to/project"
                   value={newProjectCwd}
                   onChange={(e) => setNewProjectCwd(e.target.value)}
-                  className="
+                  className={`
                     w-full bg-bg-primary border border-border rounded-xl px-4 py-3
                     text-text-primary placeholder:text-text-muted font-mono text-sm
-                    focus:outline-none focus:border-orange/60 focus:ring-2 focus:ring-orange/15
-                    transition-all
-                  "
+                    focus:outline-none transition-all
+                    ${projectMode === 'linear'
+                      ? 'focus:border-[#5E6AD2]/60 focus:ring-2 focus:ring-[#5E6AD2]/15'
+                      : 'focus:border-orange/60 focus:ring-2 focus:ring-orange/15'
+                    }
+                  `}
                 />
                 <span className="text-xs text-text-muted">Where agents will operate on your codebase</span>
               </div>
@@ -456,16 +426,19 @@ function App() {
                 Cancel
               </button>
               <button
-                className="
+                className={`
                   px-5 py-2.5 rounded-xl text-sm font-bold
-                  bg-orange hover:bg-orange-dark active:scale-[0.98]
-                  text-white transition-all shadow-[0_2px_8px_rgba(255,140,66,0.25)]
+                  active:scale-[0.98] text-white transition-all
                   disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none
-                "
+                  ${projectMode === 'linear'
+                    ? 'bg-[#5E6AD2] hover:bg-[#4E5AC2] shadow-[0_2px_8px_rgba(94,106,210,0.25)]'
+                    : 'bg-orange hover:bg-orange-dark shadow-[0_2px_8px_rgba(255,140,66,0.25)]'
+                  }
+                `}
                 onClick={handleCreateProject}
-                disabled={!newProjectName.trim()}
+                disabled={projectMode === 'linear' ? !linearIssueKey.trim() : !newProjectName.trim()}
               >
-                Create Project
+                {projectMode === 'linear' ? 'Create from Linear' : 'Create Project'}
               </button>
             </div>
           </div>

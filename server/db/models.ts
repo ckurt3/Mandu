@@ -69,7 +69,7 @@ export interface AgentSessionDoc {
   updatedAt: Date;
 }
 
-export type AgentType = 'em' | 'pm' | 'architect' | 'developer' | 'qa' | 'reviewer';
-export type ArtifactType = 'spec' | 'design_doc' | 'code_change' | 'test_report' | 'markdown';
+export type AgentType = 'em' | 'pm' | 'architect' | 'developer' | 'qa' | 'reviewer' | 'release-manager';
+export type ArtifactType = 'spec' | 'design_doc' | 'code_change' | 'test_report' | 'markdown' | 'pull_request';
 export type TaskStatus = 'pending' | 'in_progress' | 'completed' | 'cancelled';
 export type GateStatus = 'pending' | 'approved' | 'changes_requested';

@@ -40,6 +40,7 @@ export interface CreateProjectMessage {
   name: string;
   description: string;
   cwd: string;
+  linearIssueKey?: string;
 }
 
 export interface SendProjectMessageMessage {

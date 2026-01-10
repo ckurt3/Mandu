@@ -248,8 +248,14 @@ Review the work and decide on next steps. You can:
     }
 
     // Notify EM when a gate is resolved (approved or changes requested)
-    if (event.collection === 'gates' && event.operation === 'update' && event.document) {
+    if (event.collection === 'gates' && event.operation === 'update') {
+      console.log(`[Gate Update] Detected gate update, document:`, event.document ? 'present' : 'missing', 'projectId:', event.projectId);
       const gate = event.document as Gate;
+      if (!gate) {
+        console.log(`[Gate Update] No document in event, skipping notification`);
+        return;
+      }
+      console.log(`[Gate Update] Gate status: ${gate.status}, projectId: ${event.projectId}`);
       // Only notify for resolved gates (not pending)
       if (gate.status !== 'pending' && event.projectId) {
         for (const client of clients) {
@@ -268,7 +274,7 @@ Review the work and decide on next steps. You can:
 
 ${gate.status === 'approved'
   ? 'The gate was approved. You can now proceed with the next steps in the workflow.'
-  : 'Changes were requested. Review the feedback and create appropriate follow-up tasks to address the concerns.'}`;
+  : 'Changes were requested. Create a task to address the feedback, and after that task completes, create a NEW gate for re-approval.'}`;
 
               console.log(`Notifying EM for project ${event.projectId} about gate resolution: ${gateTitle} - ${gate.status}`);
               await client.emManager.sendMessageToEM(event.projectId, notificationMessage);

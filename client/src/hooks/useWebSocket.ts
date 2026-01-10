@@ -410,13 +410,14 @@ export function useWebSocket() {
   }, []);
 
   // Project operations
-  const createProject = useCallback((name: string, description: string, cwd: string) => {
+  const createProject = useCallback((name: string, description: string, cwd: string, linearIssueKey?: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'create_project',
         name,
         description,
         cwd,
+        linearIssueKey,
       }));
     }
   }, []);
@@ -475,6 +476,31 @@ export function useWebSocket() {
       }));
     }
   }, []);
+
+  // Add a local message to the chat feed (display only, doesn't notify EM)
+  const addLocalMessage = useCallback((projectId: string, message: string) => {
+    const project = projects.find(p => p._id === projectId);
+    if (project?.emAgentId) {
+      setAgents(prev => {
+        const updated = new Map(prev);
+        let agent = updated.get(project.emAgentId!);
+        if (!agent) {
+          agent = { id: project.emAgentId!, status: 'idle', messages: [] };
+        }
+        const userMessage: ChatMessage = {
+          id: `${Date.now()}-user`,
+          role: 'user',
+          content: message,
+          timestamp: Date.now(),
+        };
+        updated.set(project.emAgentId!, {
+          ...agent,
+          messages: [...agent.messages, userMessage],
+        });
+        return updated;
+      });
+    }
+  }, [projects]);
 
   // Legacy agent operations (for standalone agents)
   const createAgent = useCallback((agentId: string, cwd?: string) => {
@@ -546,6 +572,7 @@ export function useWebSocket() {
     subscribeToProject,
     sendProjectMessage,
     resolveGate,
+    addLocalMessage,
     // Helper to get agent by id
     getAgent: (id: string) => agents.get(id),
   };
