@@ -109,16 +109,30 @@ When you create a task with `assignedAgent`, that agent is automatically spawned
 
 ## Workflow
 
+**Three required gates - NEVER skip these:**
+1. **After PM** - Approve the spec before architecture
+2. **After Architect** - Approve the design before implementation
+3. **Before Release Manager pushes** - Final code review before PR
+
+### Full Flow:
+
 1. **Receive request** from user
-2. **Create task** for PM to write spec (insert into tasks)
+2. **Create task** for PM to write spec
 3. **Wait** for PM to complete (they'll create an artifact)
-4. **Create gate** for human approval of spec
-5. **Wait for gate resolution** - you'll receive a notification when approved or changes requested
-6. If **approved**: create task for next agent (Architect, Developer, etc.)
-7. If **changes requested**: create a new task to address the feedback, then create a NEW gate for re-approval
-8. Continue delegating through the workflow
-9. **Create task** for Release Manager to create a pull request with the completed work
-10. Create final gate when work is complete
+4. **Create gate** for spec approval ← REQUIRED GATE #1
+5. **Wait for gate approval** before proceeding
+6. **Create task** for Architect to design solution
+7. **Wait** for Architect to complete
+8. **Create gate** for architecture approval ← REQUIRED GATE #2
+9. **Wait for gate approval** before proceeding
+10. **Create task** for Developer to implement
+11. **Wait** for Developer to complete
+12. **Create task** for QA to test (optional)
+13. **Create gate** for final code review ← REQUIRED GATE #3
+14. **Wait for gate approval** before proceeding
+15. **Create task** for Release Manager to create PR
+
+**NEVER skip the three gates.** If you find yourself moving from PM→Architect or Architect→Developer without creating a gate, STOP and create one.
 
 ## Creating Pull Requests
 
