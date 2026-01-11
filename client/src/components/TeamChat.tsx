@@ -3,6 +3,9 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import type { AgentState, Gate, Artifact } from '../types';
 import { GateCard } from './GateCard';
+import { ArtifactsTab } from './ArtifactsTab';
+import { ArtifactsPanel } from './ArtifactsPanel';
+import { ArtifactModal } from './ArtifactModal';
 
 // All possible agent types in order
 const ALL_AGENT_TYPES = ['em', 'pm', 'architect', 'developer', 'qa', 'reviewer', 'release-manager'] as const;
@@ -157,6 +160,10 @@ export function TeamChat({ agents, onSendMessage, projectName, gates, artifacts,
 
   const isAnyWorking = agents.some(a => a.agent.status === 'thinking');
 
+  // Check if EM is initializing (thinking but no messages yet)
+  const emAgent = agentsByType.get('em');
+  const isEMInitializing = emAgent?.agent.status === 'thinking' && emAgent.agent.messages.length === 0;
+
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   }, [chatMessages]);
@@ -284,12 +291,30 @@ export function TeamChat({ agents, onSendMessage, projectName, gates, artifacts,
         getDesc: (i) => i.pattern ? String(i.pattern).slice(0, 25) : ''
       },
 
-      // MongoDB tools
-      'find': { icon: '🔍', label: 'DB FIND', textColor: 'text-[#34D399]', bgColor: 'bg-[#10B981]/5' },
-      'aggregate': { icon: '🔍', label: 'DB AGG', textColor: 'text-[#34D399]', bgColor: 'bg-[#10B981]/5' },
-      'insert-many': { icon: '➕', label: 'DB INSERT', textColor: 'text-[#34D399]', bgColor: 'bg-[#10B981]/5' },
-      'update-many': { icon: '↻', label: 'DB UPDATE', textColor: 'text-[#34D399]', bgColor: 'bg-[#10B981]/5' },
-      'delete-many': { icon: '✕', label: 'DB DELETE', textColor: 'text-red', bgColor: 'bg-red/5' },
+      // MongoDB tools - sponsor callout!
+      'find': { icon: '🍃', label: 'MONGODB', textColor: 'text-[#00ED64]', bgColor: 'bg-[#00ED64]/5', getDesc: (i) => i.collection ? `find → ${String(i.collection)}` : 'find' },
+      'aggregate': { icon: '🍃', label: 'MONGODB', textColor: 'text-[#00ED64]', bgColor: 'bg-[#00ED64]/5', getDesc: (i) => i.collection ? `aggregate → ${String(i.collection)}` : 'aggregate' },
+      'insert-many': { icon: '🍃', label: 'MONGODB', textColor: 'text-[#00ED64]', bgColor: 'bg-[#00ED64]/5', getDesc: (i) => i.collection ? `insert → ${String(i.collection)}` : 'insert' },
+      'update-many': { icon: '🍃', label: 'MONGODB', textColor: 'text-[#00ED64]', bgColor: 'bg-[#00ED64]/5', getDesc: (i) => i.collection ? `update → ${String(i.collection)}` : 'update' },
+      'delete-many': { icon: '🍃', label: 'MONGODB', textColor: 'text-red', bgColor: 'bg-red/5', getDesc: (i) => i.collection ? `delete → ${String(i.collection)}` : 'delete' },
+      'count': { icon: '🍃', label: 'MONGODB', textColor: 'text-[#00ED64]', bgColor: 'bg-[#00ED64]/5', getDesc: (i) => i.collection ? `count → ${String(i.collection)}` : 'count' },
+      'collection-schema': { icon: '🍃', label: 'MONGODB', textColor: 'text-[#00ED64]', bgColor: 'bg-[#00ED64]/5', getDesc: (i) => i.collection ? `schema → ${String(i.collection)}` : 'schema' },
+      'collection-indexes': { icon: '🍃', label: 'MONGODB', textColor: 'text-[#00ED64]', bgColor: 'bg-[#00ED64]/5', getDesc: (i) => i.collection ? `indexes → ${String(i.collection)}` : 'indexes' },
+
+      // Linear tools
+      'get_issue': { icon: '◇', label: 'LINEAR', textColor: 'text-[#5E6AD2]', bgColor: 'bg-[#5E6AD2]/5', getDesc: (i) => i.id ? String(i.id) : '' },
+      'list_issues': { icon: '◇', label: 'LINEAR', textColor: 'text-[#5E6AD2]', bgColor: 'bg-[#5E6AD2]/5', getDesc: () => 'list issues' },
+      'create_issue': { icon: '◇', label: 'LINEAR', textColor: 'text-[#5E6AD2]', bgColor: 'bg-[#5E6AD2]/5', getDesc: (i) => i.title ? `create → ${String(i.title).slice(0, 20)}` : 'create' },
+      'update_issue': { icon: '◇', label: 'LINEAR', textColor: 'text-[#5E6AD2]', bgColor: 'bg-[#5E6AD2]/5', getDesc: (i) => i.id ? `update → ${String(i.id)}` : 'update' },
+
+      // GitHub tools
+      'get_file_contents': { icon: '⬡', label: 'GITHUB', textColor: 'text-[#f0f6fc]', bgColor: 'bg-[#238636]/10', getDesc: (i) => i.path ? String(i.path).split('/').pop() : '' },
+      'create_pull_request': { icon: '⬡', label: 'GITHUB', textColor: 'text-[#238636]', bgColor: 'bg-[#238636]/10', getDesc: (i) => i.title ? `PR → ${String(i.title).slice(0, 20)}` : 'create PR' },
+      'list_pull_requests': { icon: '⬡', label: 'GITHUB', textColor: 'text-[#f0f6fc]', bgColor: 'bg-[#238636]/10', getDesc: () => 'list PRs' },
+      'create_or_update_file': { icon: '⬡', label: 'GITHUB', textColor: 'text-[#238636]', bgColor: 'bg-[#238636]/10', getDesc: (i) => i.path ? String(i.path).split('/').pop() : '' },
+      'push_files': { icon: '⬡', label: 'GITHUB', textColor: 'text-[#238636]', bgColor: 'bg-[#238636]/10', getDesc: () => 'push files' },
+      'create_branch': { icon: '⬡', label: 'GITHUB', textColor: 'text-[#238636]', bgColor: 'bg-[#238636]/10', getDesc: (i) => i.branch ? String(i.branch) : '' },
+      'search_code': { icon: '⬡', label: 'GITHUB', textColor: 'text-[#f0f6fc]', bgColor: 'bg-[#238636]/10', getDesc: (i) => i.query ? String(i.query).slice(0, 20) : 'search' },
     };
 
     const tool = toolMap[baseName] || toolMap[name];
@@ -334,6 +359,9 @@ export function TeamChat({ agents, onSendMessage, projectName, gates, artifacts,
   const [gateComment, setGateComment] = useState('');
   const [viewingArtifact, setViewingArtifact] = useState<Artifact | null>(null);
 
+  // Artifacts panel state
+  const [artifactsPanelOpen, setArtifactsPanelOpen] = useState(false);
+
   // Get artifacts for the pending gate
   const pendingGateArtifacts = pendingGate
     ? artifacts.filter(a => pendingGate.artifactIds?.includes(a._id))
@@ -348,6 +376,15 @@ export function TeamChat({ agents, onSendMessage, projectName, gates, artifacts,
           <span className="text-2xl">🥟</span>
           <span className="text-lg font-extrabold text-orange tracking-tight">Mandu</span>
         </div>
+
+        {/* Artifacts Tab - only show when artifacts exist */}
+        {artifacts.length > 0 && (
+          <ArtifactsTab
+            count={artifacts.length}
+            isOpen={artifactsPanelOpen}
+            onClick={() => setArtifactsPanelOpen(!artifactsPanelOpen)}
+          />
+        )}
 
         {/* Spacer */}
         <div className="flex-1" />
@@ -368,8 +405,7 @@ export function TeamChat({ agents, onSendMessage, projectName, gates, artifacts,
                 flex items-center gap-2 px-2.5 py-1.5 rounded-lg border flex-shrink-0
                 transition-all duration-200 hover:scale-105
                 ${isActive ? config.bgColor : 'bg-bg-elevated/50'}
-                ${isActive ? config.borderColor : 'border-border/50'}
-                ${isWorking ? 'ring-1 ring-orange/40' : ''}
+                ${isWorking ? 'border-orange' : isActive ? config.borderColor : 'border-border/50'}
                 ${!isActive ? 'opacity-50' : ''}
               `}
             >
@@ -390,18 +426,43 @@ export function TeamChat({ agents, onSendMessage, projectName, gates, artifacts,
         </div>
       </div>
 
+      {/* Artifacts Panel (conditional) */}
+      <ArtifactsPanel
+        artifacts={artifacts}
+        isOpen={artifactsPanelOpen}
+        onClose={() => setArtifactsPanelOpen(false)}
+        onSelectArtifact={(artifact) => {
+          setViewingArtifact(artifact);
+        }}
+      />
+
       {/* Chat Messages - Scrollable */}
-      <div className="flex-1 overflow-y-auto min-h-0">
-        <div className="max-w-3xl mx-auto px-5 py-4">
+      <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
+        <div className={`max-w-3xl mx-auto px-5 py-4 w-full ${groupedMessages.length === 0 && !pendingGate ? 'flex-1 flex flex-col justify-center' : ''}`}>
           {groupedMessages.length === 0 && !pendingGate ? (
-            <div className="flex flex-col items-center justify-center h-full text-center py-20">
-              <div className="w-20 h-20 rounded-2xl bg-orange/10 border border-orange/20 flex items-center justify-center text-4xl mb-5">
+            <div className="flex flex-col items-center justify-center text-center">
+              <div className={`w-20 h-20 rounded-2xl bg-orange/10 border border-orange/20 flex items-center justify-center text-4xl mb-5 ${isEMInitializing ? 'animate-pulse' : ''}`}>
                 🥟
               </div>
-              <h3 className="text-lg font-bold text-text-primary mb-2">Ready to collaborate</h3>
-              <p className="text-text-muted max-w-sm">
-                Send a message to start working with your AI team on <span className="text-orange font-semibold">{projectName}</span>
-              </p>
+              {isEMInitializing ? (
+                <>
+                  <h3 className="text-lg font-bold text-text-primary mb-2">Initializing your AI team...</h3>
+                  <p className="text-text-muted max-w-sm">
+                    The Engineering Manager is setting up <span className="text-orange font-semibold">{projectName}</span>
+                  </p>
+                  <div className="mt-4 flex items-center gap-2 text-sm text-text-muted">
+                    <span className="w-2 h-2 rounded-full bg-orange animate-pulse" />
+                    <span>Analyzing project requirements</span>
+                  </div>
+                </>
+              ) : (
+                <>
+                  <h3 className="text-lg font-bold text-text-primary mb-2">Ready to collaborate</h3>
+                  <p className="text-text-muted max-w-sm">
+                    Send a message to start working with your AI team on <span className="text-orange font-semibold">{projectName}</span>
+                  </p>
+                </>
+              )}
             </div>
           ) : (
             <div className="flex flex-col gap-5">
@@ -835,115 +896,17 @@ export function TeamChat({ agents, onSendMessage, projectName, gates, artifacts,
       )}
 
       {/* Artifact Viewing Modal */}
-      {viewingArtifact && (
-        <div
-          className="fixed inset-0 z-[100] bg-black/75 backdrop-blur-sm flex items-center justify-center p-6 animate-modal-fade"
-          onClick={() => setViewingArtifact(null)}
-        >
-          <div
-            className="w-full max-w-[900px] max-h-[92vh] bg-bg-elevated border border-border rounded-2xl flex flex-col overflow-hidden shadow-modal animate-modal-slide"
-            onClick={(e) => e.stopPropagation()}
-          >
-            {/* Header */}
-            <header className="flex items-center justify-between px-5 py-3 bg-bg-secondary border-b border-border">
-              <div className="flex items-center gap-3">
-                <span className="text-2xl">📄</span>
-                <div>
-                  <span className="block text-[11px] font-bold uppercase tracking-wide text-[#A78BFA] mb-0.5">
-                    {viewingArtifact.type.replace('_', ' ')}
-                  </span>
-                  <h2 className="text-base font-bold text-text-primary leading-tight">{viewingArtifact.name}</h2>
-                </div>
-              </div>
-              <button
-                className="w-8 h-8 flex items-center justify-center text-text-muted hover:text-text-primary hover:bg-bg-hover rounded-lg transition-colors"
-                onClick={() => setViewingArtifact(null)}
-              >
-                ✕
-              </button>
-            </header>
-
-            {/* Content */}
-            <div className="flex-1 overflow-y-auto p-5">
-              <div className="markdown-content">
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {viewingArtifact.content}
-                </ReactMarkdown>
-              </div>
-            </div>
-
-            {/* Footer */}
-            <footer className="flex items-center justify-between px-5 py-3 bg-bg-secondary border-t border-border">
-              <span className="text-xs text-text-muted">Created by {viewingArtifact.createdBy}</span>
-              <button
-                className="px-4 py-2 rounded-lg text-sm font-semibold text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors"
-                onClick={() => setViewingArtifact(null)}
-              >
-                Close
-              </button>
-            </footer>
-
-            {/* Review Actions - only show if this artifact is part of the pending gate */}
-            {pendingGate && pendingGate.artifactIds?.includes(viewingArtifact._id) && (
-              <div className="px-5 py-4 bg-bg-primary border-t border-orange/30">
-                <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-orange mb-3">
-                  <span>⚡</span>
-                  <span>Submit Review</span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <input
-                    type="text"
-                    value={gateComment}
-                    onChange={(e) => setGateComment(e.target.value)}
-                    placeholder="Feedback (required for changes)..."
-                    className="
-                      flex-1 bg-bg-elevated border border-border rounded-lg px-4 py-2.5
-                      text-sm text-text-primary placeholder:text-text-muted
-                      focus:outline-none focus:border-orange/50 focus:ring-1 focus:ring-orange/10
-                      transition-all
-                    "
-                  />
-                  <button
-                    onClick={() => {
-                      onResolveGate(pendingGate._id, 'approved', gateComment || undefined);
-                      setGateComment('');
-                      setViewingArtifact(null);
-                    }}
-                    className="
-                      px-4 py-2.5 rounded-lg font-bold text-sm
-                      bg-green/15 text-green border border-green/30
-                      hover:bg-green/25 hover:border-green/40
-                      active:scale-[0.98] transition-all flex items-center gap-1.5
-                    "
-                  >
-                    <span>✓</span>
-                    <span>Approve</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      onResolveGate(pendingGate._id, 'changes_requested', gateComment);
-                      setGateComment('');
-                      setViewingArtifact(null);
-                    }}
-                    disabled={!gateComment.trim()}
-                    className="
-                      px-4 py-2.5 rounded-lg font-bold text-sm
-                      bg-bg-elevated border border-border text-text-secondary
-                      hover:bg-golden/10 hover:text-golden hover:border-golden/40
-                      disabled:opacity-40 disabled:cursor-not-allowed
-                      active:scale-[0.98] transition-all flex items-center gap-1.5
-                    "
-                    title={!gateComment.trim() ? 'Add feedback to request changes' : ''}
-                  >
-                    <span>↻</span>
-                    <span>Request Changes</span>
-                  </button>
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      <ArtifactModal
+        artifact={viewingArtifact}
+        onClose={() => setViewingArtifact(null)}
+        gate={pendingGate}
+        gateComment={gateComment}
+        onGateCommentChange={setGateComment}
+        onResolveGate={(gateId, status, comment) => {
+          onResolveGate(gateId, status, comment);
+          setGateComment('');
+        }}
+      />
     </div>
   );
 }
