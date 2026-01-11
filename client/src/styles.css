@@ -1,7 +1,7 @@
 @import url('https://fonts.googleapis.com/css2?family=Nunito:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
 @import "tailwindcss";
 
-/* Custom Theme */
+/* Custom Theme - Dark (Default) */
 @theme {
   /* Background colors */
   --color-bg-primary: #0D0D0D;
@@ -40,6 +40,55 @@
   --shadow-medium: 0 8px 30px rgba(0, 0, 0, 0.4);
   --shadow-glow: 0 0 30px rgba(255, 140, 66, 0.15);
   --shadow-modal: 0 24px 80px rgba(0, 0, 0, 0.4);
+}
+
+/* Light Theme Overrides */
+[data-theme="light"] {
+  /* Background colors */
+  --color-bg-primary: #FFFFFF;
+  --color-bg-secondary: #F5F5F5;
+  --color-bg-elevated: #EEEEEE;
+  --color-bg-hover: #E5E5E5;
+
+  /* Border colors */
+  --color-border: #D4D4D4;
+  --color-border-light: #E5E5E5;
+
+  /* Text colors */
+  --color-text-primary: #1A1A1A;
+  --color-text-secondary: #525252;
+  --color-text-muted: #737373;
+
+  /* Accent color adjustments for light bg contrast */
+  --color-green: #22C55E;
+  --color-green-dim: rgba(34, 197, 94, 0.15);
+  --color-red: #EF4444;
+  --color-red-dim: rgba(239, 68, 68, 0.15);
+
+  /* Shadows - lighter for light theme */
+  --shadow-soft: 0 4px 20px rgba(0, 0, 0, 0.08);
+  --shadow-medium: 0 8px 30px rgba(0, 0, 0, 0.12);
+  --shadow-glow: 0 0 30px rgba(255, 140, 66, 0.2);
+  --shadow-modal: 0 24px 80px rgba(0, 0, 0, 0.15);
+}
+
+/* Theme transition for smooth switching */
+html {
+  transition: background-color 0.2s ease, color 0.2s ease;
+}
+
+/* Transition on key elements for smooth theme switch */
+body,
+.bg-bg-primary,
+.bg-bg-secondary,
+.bg-bg-elevated,
+.text-text-primary,
+.text-text-secondary,
+.border-border {
+  transition:
+    background-color 0.2s ease,
+    border-color 0.2s ease,
+    color 0.2s ease;
 }
 
 /* Base styles */

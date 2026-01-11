@@ -2,6 +2,8 @@ import { useCallback, useState, useEffect, useMemo } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { TeamChat } from './components/TeamChat';
 import { SlideMenu } from './components/SlideMenu';
+import { ThemeProvider } from './contexts/ThemeContext';
+import { ThemeToggle } from './components/ThemeToggle';
 import type { AgentState } from './types';
 import './styles.css';
 
@@ -133,19 +135,24 @@ function App() {
   }, [selectedProject, projectTasks, agents, getAgent]);
 
   return (
-    <div className="h-screen flex flex-row bg-bg-primary overflow-hidden">
-      {/* Slide Menu with Sidebar Content */}
-      <SlideMenu isOpen={isMenuOpen} onOpen={openMenu} onClose={closeMenu}>
-        {/* Brand Header */}
-        <div className="p-5 border-b border-border bg-gradient-to-br from-orange/5 via-transparent to-transparent">
-          <div className="flex items-center gap-3">
-            <div className="w-12 h-12 rounded-xl bg-orange/15 border border-orange/25 flex items-center justify-center text-2xl shadow-[0_0_20px_rgba(255,140,66,0.1)]">
-              🥟
+    <ThemeProvider>
+      <div className="h-screen flex flex-row bg-bg-primary overflow-hidden">
+        {/* Slide Menu with Sidebar Content */}
+        <SlideMenu isOpen={isMenuOpen} onOpen={openMenu} onClose={closeMenu}>
+          {/* Brand Header */}
+          <div className="p-5 border-b border-border bg-gradient-to-br from-orange/5 via-transparent to-transparent">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-12 h-12 rounded-xl bg-orange/15 border border-orange/25 flex items-center justify-center text-2xl shadow-[0_0_20px_rgba(255,140,66,0.1)]">
+                  🥟
+                </div>
+                <div>
+                  <h1 className="text-xl font-extrabold text-orange tracking-tight">Mandu</h1>
+                </div>
+              </div>
+              {/* Theme Toggle */}
+              <ThemeToggle />
             </div>
-            <div>
-              <h1 className="text-xl font-extrabold text-orange tracking-tight">Mandu</h1>
-            </div>
-          </div>
 
           {/* Connection Status */}
           <div className={`
@@ -444,7 +451,8 @@ function App() {
           </div>
         </div>
       )}
-    </div>
+      </div>
+    </ThemeProvider>
   );
 }
 
