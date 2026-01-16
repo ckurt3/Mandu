@@ -4,15 +4,16 @@
   "license": "AGPL-3.0",
   "type": "module",
   "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
-    "dev:server": "drizzle-kit push && tsx watch server/index.ts",
+    "dev": "DATABASE_PATH=./data/mandu-dev.db PORT=3001 concurrently \"npm run dev:server\" \"npm run dev:client\"",
+    "dev:server": "DATABASE_PATH=./data/mandu-dev.db PORT=3001 drizzle-kit push && DATABASE_PATH=./data/mandu-dev.db PORT=3001 tsx watch server/index.ts",
     "dev:client": "vite --config client/vite.config.ts",
     "build": "npm run build:client && npm run build:server",
     "build:client": "vite build --config client/vite.config.ts",
     "build:server": "tsc -p tsconfig.server.json && cp -r server/agents dist/server/server/",
-    "start": "NODE_ENV=production node dist/server/server/index.js",
+    "start": "DATABASE_PATH=./data/mandu-prod.db drizzle-kit push && DATABASE_PATH=./data/mandu-prod.db NODE_ENV=production node dist/server/server/index.js",
     "db:push": "drizzle-kit push",
-    "db:reset": "rm -f data/mandu.db && npm run db:push"
+    "db:reset:dev": "rm -f data/mandu-dev.db && DATABASE_PATH=./data/mandu-dev.db npm run db:push",
+    "db:reset:prod": "rm -f data/mandu-prod.db && DATABASE_PATH=./data/mandu-prod.db npm run db:push"
   },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.3",
