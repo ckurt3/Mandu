@@ -4,7 +4,7 @@ import { TeamChat } from './components/TeamChat';
 import { SlideMenu } from './components/SlideMenu';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ThemeToggle } from './components/ThemeToggle';
-import type { AgentState } from '@shared/types';
+import type { AgentState, Gate, Artifact } from '@shared/types';
 import './styles.css';
 
 function App() {
@@ -44,8 +44,8 @@ function App() {
   useEffect(() => {
     if (projects.length > 0 && !selectedProjectId) {
       const firstProject = projects[0];
-      setSelectedProjectId(firstProject._id);
-      subscribeToProject(firstProject._id);
+      setSelectedProjectId(firstProject.id);
+      subscribeToProject(firstProject.id);
     }
   }, [projects, selectedProjectId, subscribeToProject]);
 
@@ -77,7 +77,7 @@ function App() {
     }
   }, [createProject, projectMode, newProjectName, newProjectDesc, newProjectCwd, linearIssueKey]);
 
-  const selectedProject = projects.find(p => p._id === selectedProjectId);
+  const selectedProject = projects.find(p => p.id === selectedProjectId);
   const projectTasks = tasks.filter(t => t.projectId === selectedProjectId);
   const projectGates = gates.filter(g => g.projectId === selectedProjectId);
   const projectArtifacts = artifacts.filter(a => a.projectId === selectedProjectId);
@@ -90,28 +90,30 @@ function App() {
     const result: Array<{ agent: AgentState; type: string; isPrimary: boolean }> = [];
     const addedAgentIds = new Set<string>();
 
-    // Add EM agent first (primary)
-    if (selectedProject.emAgentId) {
-      const emAgent = getAgent(selectedProject.emAgentId) || {
-        id: selectedProject.emAgentId,
-        status: 'idle' as const,
-        messages: [],
-      };
-      result.push({ agent: emAgent, type: 'em', isPrimary: true });
-      addedAgentIds.add(selectedProject.emAgentId);
-    }
+    // Add EM agent first (primary) - EM agent ID is always `em-${projectId}`
+    const emAgentId = `em-${selectedProject.id}`;
+    const emAgent = getAgent(emAgentId) || {
+      id: emAgentId,
+      status: 'idle' as const,
+      messages: [],
+    };
+    result.push({ agent: emAgent, type: 'em', isPrimary: true });
+    addedAgentIds.add(emAgentId);
 
-    // Add worker agents from tasks (by agentSessionId)
+    // Add worker agents from tasks - worker agent ID is `${agentType}-${taskId}`
     for (const task of projectTasks) {
-      if (task.agentSessionId && task.assignedAgent !== 'em' && !addedAgentIds.has(task.agentSessionId)) {
-        const agent = getAgent(task.agentSessionId);
-        if (agent) {
-          result.push({
-            agent,
-            type: task.assignedAgent,
-            isPrimary: false,
-          });
-          addedAgentIds.add(task.agentSessionId);
+      if (task.agentType && task.agentType !== 'em') {
+        const workerAgentId = `${task.agentType}-${task.id}`;
+        if (!addedAgentIds.has(workerAgentId)) {
+          const agent = getAgent(workerAgentId);
+          if (agent) {
+            result.push({
+              agent,
+              type: task.agentType,
+              isPrimary: false,
+            });
+            addedAgentIds.add(workerAgentId);
+          }
         }
       }
     }
@@ -123,7 +125,7 @@ function App() {
       const match = agent.id.match(/^(pm|architect|developer|qa|reviewer)-(.+)$/);
       if (match) {
         const [, agentType, taskId] = match;
-        const matchingTask = projectTasks.find(t => t._id === taskId);
+        const matchingTask = projectTasks.find(t => t.id === taskId);
         if (matchingTask) {
           result.push({
             agent,
@@ -212,13 +214,13 @@ function App() {
         <div className="flex-1 overflow-y-auto px-3 pb-3 flex flex-col gap-2">
           {projects.map((project) => {
             const projectPendingGates = gates.filter(
-              g => g.projectId === project._id && g.status === 'pending'
+              g => g.projectId === project.id && g.status === 'pending'
             ).length;
-            const isSelected = project._id === selectedProjectId;
+            const isSelected = project.id === selectedProjectId;
 
             return (
               <button
-                key={project._id}
+                key={project.id}
                 className={`
                   relative w-full text-left p-3.5 rounded-xl border transition-all duration-200
                   ${isSelected
@@ -226,7 +228,7 @@ function App() {
                     : 'bg-bg-elevated border-border hover:border-orange/30 hover:bg-bg-hover'
                   }
                 `}
-                onClick={() => handleSelectProject(project._id)}
+                onClick={() => handleSelectProject(project.id)}
               >
                 <div className={`font-semibold text-sm mb-1 truncate ${isSelected ? 'text-orange' : 'text-text-primary'}`}>
                   {project.name}
@@ -281,16 +283,16 @@ function App() {
         {selectedProject ? (
           <TeamChat
             agents={projectAgents.map(({ agent, type }) => ({ agent, type }))}
-            onSendMessage={(message) => sendProjectMessage(selectedProject._id, message)}
+            onSendMessage={(message) => sendProjectMessage(selectedProject.id, message)}
             projectName={selectedProject.name}
             gates={projectGates}
             artifacts={projectArtifacts}
             onResolveGate={(gateId, status, comment) => {
               resolveGate(gateId, status, comment);
-              const gate = projectGates.find(g => g._id === gateId);
+              const gate = projectGates.find(g => g.id === gateId);
               const statusText = status === 'approved' ? '✅ Approved' : '↻ Requested changes on';
               const message = `${statusText} gate: **${gate?.title}**${comment ? `\n\n> ${comment}` : ''}`;
-              addLocalMessage(selectedProject._id, message);
+              addLocalMessage(selectedProject.id, message);
             }}
           />
         ) : (

@@ -14,7 +14,9 @@ export function useWebSocket() {
   // Connect to WebSocket
   useEffect(() => {
     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-    const wsUrl = `${protocol}//${window.location.hostname}:3000`;
+    // Dev server (5173) connects to dev backend (3001), prod (3000) connects to itself
+    const wsPort = window.location.port === '5173' ? '3001' : '3000';
+    const wsUrl = `${protocol}//${window.location.hostname}:${wsPort}`;
 
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
