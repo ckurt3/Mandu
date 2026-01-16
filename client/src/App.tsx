@@ -4,7 +4,7 @@ import { TeamChat } from './components/TeamChat';
 import { SlideMenu } from './components/SlideMenu';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ThemeToggle } from './components/ThemeToggle';
-import type { AgentState } from './types';
+import type { AgentState } from '@shared/types';
 import './styles.css';
 
 function App() {
@@ -28,13 +28,17 @@ function App() {
   const [projectMode, setProjectMode] = useState<'manual' | 'linear'>('manual');
   const [newProjectName, setNewProjectName] = useState('');
   const [newProjectDesc, setNewProjectDesc] = useState('');
-  const [newProjectCwd, setNewProjectCwd] = useState('/');
+  const [newProjectCwd, setNewProjectCwd] = useState('');
   const [linearIssueKey, setLinearIssueKey] = useState('');
-  const [isMenuOpen, setIsMenuOpen] = useState(false);
+  // Menu state - default to open on desktop
+  const [isMenuOpen, setIsMenuOpen] = useState(() => {
+    return typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
+  });
 
   // Menu handlers
   const openMenu = useCallback(() => setIsMenuOpen(true), []);
   const closeMenu = useCallback(() => setIsMenuOpen(false), []);
+  const toggleMenu = useCallback(() => setIsMenuOpen(prev => !prev), []);
 
   // Auto-select first project
   useEffect(() => {
@@ -137,8 +141,26 @@ function App() {
   return (
     <ThemeProvider>
       <div className="h-screen flex flex-row bg-bg-primary overflow-hidden">
+        {/* Desktop expand button - visible when sidebar is collapsed */}
+        <button
+          className={`
+            hidden lg:flex fixed top-3 left-3 z-30
+            w-10 h-10 items-center justify-center
+            bg-bg-secondary border border-border rounded-xl
+            text-text-muted hover:text-orange hover:border-orange/30 hover:bg-bg-hover
+            transition-all duration-300 shadow-soft
+            ${isMenuOpen ? 'opacity-0 pointer-events-none -translate-x-2' : 'opacity-100 translate-x-0'}
+          `}
+          onClick={toggleMenu}
+          aria-label="Expand sidebar"
+        >
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" />
+          </svg>
+        </button>
+
         {/* Slide Menu with Sidebar Content */}
-        <SlideMenu isOpen={isMenuOpen} onOpen={openMenu} onClose={closeMenu}>
+        <SlideMenu isOpen={isMenuOpen} onOpen={openMenu} onClose={closeMenu} onToggle={toggleMenu}>
           {/* Brand Header */}
           <div className="p-5 border-b border-border bg-gradient-to-br from-orange/5 via-transparent to-transparent">
             <div className="flex items-center justify-between">
@@ -150,8 +172,19 @@ function App() {
                   <h1 className="text-xl font-extrabold text-orange tracking-tight">Mandu</h1>
                 </div>
               </div>
-              {/* Theme Toggle */}
-              <ThemeToggle />
+              {/* Theme Toggle + Collapse Button (desktop) */}
+              <div className="flex items-center gap-1">
+                <ThemeToggle />
+                <button
+                  className="flex w-9 h-9 items-center justify-center rounded-lg border border-border text-text-muted hover:text-orange hover:border-orange/30 hover:bg-orange/5 transition-all"
+                  onClick={toggleMenu}
+                  aria-label="Close sidebar"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                  </svg>
+                </button>
+              </div>
             </div>
 
           {/* Connection Status */}
