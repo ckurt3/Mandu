@@ -1,23 +1,87 @@
-// WebSocket message types between client and server
+// Shared types between client and server
+
+// Domain types
+export type AgentStatus = 'idle' | 'thinking' | 'error' | 'closed';
+export type AgentType = 'em' | 'pm' | 'architect' | 'developer' | 'qa' | 'reviewer';
+export type TaskStatus = 'pending' | 'running' | 'completed' | 'failed';
+export type GateStatus = 'pending' | 'approved' | 'rejected';
+export type ProjectStatus = 'idle' | 'running' | 'waiting_approval' | 'completed' | 'failed';
+export type ArtifactType = 'spec' | 'design_doc' | 'code_change' | 'test_report' | 'review' | 'markdown';
+
+// Frontend data models (using string IDs for JSON serialization)
+export interface Project {
+  id: string;
+  name: string;
+  description: string | null;
+  cwd: string | null;
+  status: string | null;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}
+
+export interface Task {
+  id: string;
+  projectId: string;
+  agentType: string;
+  title: string;
+  input: string | null;
+  output: string | null;
+  status: string | null;
+  error: string | null;
+  attempts: number | null;
+  createdAt: Date | null;
+  completedAt: Date | null;
+}
+
+export interface Gate {
+  id: string;
+  projectId: string;
+  type: string;
+  title: string;
+  description: string | null;
+  status: string | null;
+  requestedAt: Date | null;
+  resolvedAt: Date | null;
+  resolvedBy: string | null;
+  resolution: string | null;
+}
+
+export interface Artifact {
+  id: string;
+  projectId: string;
+  taskId: string | null;
+  type: string;
+  title: string;
+  content: string | null;
+  filePath: string | null;
+  metadata: string | null;
+  createdAt: Date | null;
+}
+
+// Chat/Agent state (for UI)
+export interface ChatMessage {
+  id: string;
+  role: 'user' | 'assistant' | 'tool' | 'system';
+  content: string;
+  isPartial?: boolean;
+  timestamp: number;
+  agentType?: string;
+  taskId?: string;
+  toolName?: string;
+  toolInput?: Record<string, unknown>;
+  toolResult?: string;
+  isToolResult?: boolean;
+}
+
+export interface AgentState {
+  id: string;
+  status: AgentStatus;
+  messages: ChatMessage[];
+}
+
+// WebSocket message types
 
 // Client -> Server messages
-export interface CreateAgentMessage {
-  type: 'create_agent';
-  agentId: string;
-  cwd?: string;
-}
-
-export interface SendMessageMessage {
-  type: 'send_message';
-  agentId: string;
-  message: string;
-}
-
-export interface CloseAgentMessage {
-  type: 'close_agent';
-  agentId: string;
-}
-
 export interface SubscribeProjectMessage {
   type: 'subscribe_project';
   projectId: string;
@@ -25,14 +89,6 @@ export interface SubscribeProjectMessage {
 
 export interface UnsubscribeProjectMessage {
   type: 'unsubscribe_project';
-  projectId: string;
-}
-
-export interface ResolveGateMessage {
-  type: 'resolve_gate';
-  gateId: string;
-  status: 'approved' | 'changes_requested';
-  comment?: string;
 }
 
 export interface CreateProjectMessage {
@@ -40,116 +96,56 @@ export interface CreateProjectMessage {
   name: string;
   description: string;
   cwd: string;
-  linearIssueKey?: string;
-}
-
-export interface SendProjectMessageMessage {
-  type: 'send_project_message';
-  projectId: string;
-  message: string;
 }
 
 export interface ListProjectsMessage {
   type: 'list_projects';
 }
 
+export interface MessagePayload {
+  text: string;
+  images?: string[];
+  pdfs?: Array<{ name: string; dataUrl: string }>;
+  textFiles?: Array<{ name: string; content: string }>;
+}
+
+export interface SendProjectMessageMessage {
+  type: 'send_project_message';
+  projectId: string;
+  message: string | MessagePayload;
+}
+
+export interface ResolveGateMessage {
+  type: 'resolve_gate';
+  gateId: string;
+  status: 'approved' | 'rejected';
+  comment?: string;
+}
+
 export type ClientMessage =
-  | CreateAgentMessage
-  | SendMessageMessage
-  | CloseAgentMessage
   | SubscribeProjectMessage
   | UnsubscribeProjectMessage
-  | ResolveGateMessage
   | CreateProjectMessage
+  | ListProjectsMessage
   | SendProjectMessageMessage
-  | ListProjectsMessage;
+  | ResolveGateMessage;
 
 // Server -> Client messages
-export interface AgentCreatedMessage {
-  type: 'agent_created';
-  agentId: string;
-}
-
-export interface AgentUserMessageReplay {
-  type: 'agent_user_message';
-  agentId: string;
-  content: string;
-  isReplay: boolean;
-}
-
-export interface AgentMessageMessage {
-  type: 'agent_message';
-  agentId: string;
-  content: string;
-  isPartial: boolean;
-  isReplay?: boolean;
-}
-
-export interface AgentResultMessage {
-  type: 'agent_result';
-  agentId: string;
-  result: string;
-  stats: {
-    durationMs: number;
-    totalCostUsd: number;
-    numTurns: number;
-  };
-}
-
-export interface AgentErrorMessage {
-  type: 'agent_error';
-  agentId: string;
-  error: string;
-}
-
-export interface AgentStatusMessage {
-  type: 'agent_status';
-  agentId: string;
-  status: AgentStatus;
-}
-
-export interface AgentToolUseMessage {
-  type: 'agent_tool_use';
-  agentId: string;
-  toolName: string;
-  toolInput: Record<string, unknown>;
-  isReplay?: boolean;
-}
-
-export interface AgentToolResultMessage {
-  type: 'agent_tool_result';
-  agentId: string;
-  toolName: string;
-  output: string;
-  isReplay?: boolean;
-}
-
-// Database change messages
-export interface DbChangeMessage {
-  type: 'db_change';
-  collection: 'projects' | 'tasks' | 'gates' | 'artifacts';
-  operation: 'insert' | 'update' | 'delete' | 'replace';
-  documentId: string;
-  document?: unknown;
-  projectId?: string;
-}
-
 export interface ProjectSubscribedMessage {
   type: 'project_subscribed';
   projectId: string;
-}
-
-export interface GateResolvedMessage {
-  type: 'gate_resolved';
-  gateId: string;
-  status: 'approved' | 'changes_requested';
+  project: Project;
+  tasks?: Task[];
+  pendingGates: Gate[];
+  artifacts?: Artifact[];
+  timeline?: ServerMessage[];
 }
 
 export interface ProjectCreatedMessage {
   type: 'project_created';
   projectId: string;
   name: string;
-  emAgentId: string;
+  description?: string;
 }
 
 export interface ProjectsListMessage {
@@ -157,9 +153,8 @@ export interface ProjectsListMessage {
   projects: Array<{
     _id: string;
     name: string;
-    description: string;
-    status: string;
-    emAgentId?: string;
+    description: string | null;
+    status: string | null;
   }>;
 }
 
@@ -168,53 +163,86 @@ export interface ProjectErrorMessage {
   error: string;
 }
 
-export interface AgentHistoryMessage {
-  type: 'agent_history';
-  agentId: string;
-  messages: Array<{
-    role: 'user' | 'assistant' | 'tool';
-    content: string;
-    toolName?: string;
-    toolInput?: Record<string, unknown>;
-    isToolResult?: boolean;
-    timestamp: number;
-  }>;
+export interface ProjectStatusMessage {
+  type: 'project_status';
+  projectId: string;
+  status: string;
+  summary?: string;
+  error?: string;
+}
+
+export interface TaskStartedMessage {
+  type: 'task_started';
+  projectId: string;
+  taskId: string;
+  agentType: string;
+}
+
+export interface TaskCompletedMessage {
+  type: 'task_completed';
+  projectId: string;
+  taskId: string;
+  agentType: string;
+  result: unknown;
+}
+
+export interface TaskFailedMessage {
+  type: 'task_failed';
+  projectId: string;
+  taskId: string;
+  agentType: string;
+  error: string;
+}
+
+export interface AgentMessageMessage {
+  type: 'agent_message';
+  taskId?: string;
+  projectId: string;
+  agentType: string;
+  message?: string;
+  isPartial?: boolean;
+  isUserMessage?: boolean;
+  toolName?: string;
+  toolInput?: Record<string, unknown>;
+  toolResult?: string;
+  toolUseId?: string;
+}
+
+export interface GateCreatedMessage {
+  type: 'gate_created';
+  projectId: string;
+  gate: { id: string; type: string; title: string; description?: string };
+}
+
+export interface GateResolvedMessage {
+  type: 'gate_resolved';
+  gateId: string;
+  status: string;
+  projectId?: string;
+}
+
+export interface ArtifactCreatedMessage {
+  type: 'artifact_created';
+  projectId: string;
+  artifact: { id: string; type: string; title: string };
+}
+
+export interface EMWaitingMessage {
+  type: 'em_waiting';
+  projectId: string;
 }
 
 export type ServerMessage =
-  | AgentCreatedMessage
-  | AgentUserMessageReplay
-  | AgentMessageMessage
-  | AgentResultMessage
-  | AgentErrorMessage
-  | AgentStatusMessage
-  | AgentToolUseMessage
-  | AgentToolResultMessage
-  | DbChangeMessage
   | ProjectSubscribedMessage
-  | GateResolvedMessage
   | ProjectCreatedMessage
   | ProjectsListMessage
   | ProjectErrorMessage
-  | AgentHistoryMessage;
-
-// Agent status
-export type AgentStatus = 'idle' | 'thinking' | 'error' | 'closed';
-
-// Frontend types
-export interface AgentState {
-  id: string;
-  status: AgentStatus;
-  messages: ChatMessage[];
-}
-
-export interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant' | 'tool';
-  content: string;
-  isPartial?: boolean;
-  timestamp: number;
-  toolName?: string;
-  toolInput?: Record<string, unknown>;
-  isToolResult?: boolean;
-}
+  | ProjectStatusMessage
+  | TaskStartedMessage
+  | TaskCompletedMessage
+  | TaskFailedMessage
+  | AgentMessageMessage
+  | GateCreatedMessage
+  | GateResolvedMessage
+  | ArtifactCreatedMessage
+  | EMWaitingMessage;

@@ -1,5 +1,5 @@
 import { useState, useMemo } from 'react';
-import type { Artifact, ArtifactType } from '../types';
+import type { Artifact, ArtifactType } from '@shared/types';
 import { ArtifactListItem } from './ArtifactListItem';
 
 type FilterType = 'all' | ArtifactType;
@@ -48,10 +48,12 @@ export function ArtifactsPanel({
       ? artifacts
       : artifacts.filter(a => a.type === filter);
 
-    // Sort by createdAt descending (newest first)
-    return [...filtered].sort((a, b) =>
-      new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-    );
+    // Sort by createdAt descending (newest first), handling null dates
+    return [...filtered].sort((a, b) => {
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bTime - aTime;
+    });
   }, [artifacts, filter]);
 
   if (!isOpen) return null;
@@ -129,7 +131,7 @@ export function ArtifactsPanel({
           ) : (
             filteredArtifacts.map(artifact => (
               <ArtifactListItem
-                key={artifact._id}
+                key={artifact.id}
                 artifact={artifact}
                 onClick={() => onSelectArtifact(artifact)}
               />

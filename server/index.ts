@@ -1,20 +1,18 @@
 import 'dotenv/config';
-
-// Enable SDK debug logging
-process.env.DEBUG_CLAUDE_AGENT_SDK = '1';
 import express from 'express';
 import { createServer } from 'http';
-import { WebSocketServer } from 'ws';
+import { WebSocketServer, WebSocket } from 'ws';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
-import { createWsHandler, type WsClient } from './wsHandler.js';
-import { connectToMongo, closeMongo, getCollections } from './db/mongo.js';
-import { getChangeStreamWatcher } from './db/changeStream.js';
-import { WorkerAgentManager } from './orchestrator/workerAgent.js';
-import { SessionManager } from './sessionManager.js';
-import { readSessionHistory } from './sessionHistory.js';
-import type { ServerMessage } from '../shared/types.js';
-import type { Task, Gate } from './db/models.js';
+import { db, closeDb } from './db/client.js';
+import { projects, gates, artifacts, tasks, timelineEvents } from './db/schema.js';
+import { eq, asc } from 'drizzle-orm';
+import { setupWebSocket, broadcastToProject, setClientSubscription, sendToClient } from './websocket.js';
+import { runEMAgent, sendMessageToEM, resolveGate } from './orchestrator/emAgent.js';
+import { recoverInProgressProjects } from './recovery.js';
+import runsRouter from './routes/runs.js';
+import { randomUUID } from 'crypto';
+import { validateClientMessage, type ValidatedClientMessage } from './validation.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3000;
@@ -22,282 +20,270 @@ const PORT = process.env.PORT || 3000;
 const app = express();
 const server = createServer(app);
 
-// Track all connected clients
-const clients = new Set<WsClient>();
-
-// Global session manager for worker agents (broadcasts to all subscribed clients)
-const globalSessionManager = new SessionManager({
-  onMessage: (agentId, sdkMessage) => {
-    console.log(`[GlobalSession] Message from ${agentId}:`, (sdkMessage as { type: string }).type);
-    // Extract projectId from agentId (format: agentType-taskId)
-    // We need to find which project this agent belongs to
-    const session = globalSessionManager.getSession(agentId);
-    const projectId = session?.projectId;
-
-    for (const client of clients) {
-      if (projectId && client.subscribedProjects.has(projectId)) {
-        if (client.ws.readyState === client.ws.OPEN) {
-          // Forward the SDK message handling to the client
-          broadcastAgentMessage(client, agentId, sdkMessage);
-        }
-      }
-    }
-  },
-  onStatus: (agentId, status) => {
-    console.log(`[GlobalSession] Status change for ${agentId}: ${status}`);
-    const session = globalSessionManager.getSession(agentId);
-    const projectId = session?.projectId;
-
-    for (const client of clients) {
-      if (projectId && client.subscribedProjects.has(projectId)) {
-        if (client.ws.readyState === client.ws.OPEN) {
-          client.ws.send(JSON.stringify({
-            type: 'agent_status',
-            agentId,
-            status,
-          }));
-        }
-      }
-    }
-  },
-  onError: (agentId, error) => {
-    console.error(`[GlobalSession] ERROR for ${agentId}:`, error.message);
-    const session = globalSessionManager.getSession(agentId);
-    const projectId = session?.projectId;
-
-    for (const client of clients) {
-      if (projectId && client.subscribedProjects.has(projectId)) {
-        if (client.ws.readyState === client.ws.OPEN) {
-          client.ws.send(JSON.stringify({
-            type: 'agent_error',
-            agentId,
-            error: error.message,
-          }));
-        }
-      }
-    }
-  },
-});
-
-// Global worker manager
-const globalWorkerManager = new WorkerAgentManager(globalSessionManager);
-
-// Helper to broadcast SDK messages
-function broadcastAgentMessage(client: WsClient, agentId: string, sdkMessage: unknown) {
-  const msg = sdkMessage as { type: string; message?: { content: unknown[] }; result?: string; duration_ms?: number; total_cost_usd?: number; num_turns?: number };
-
-  if (msg.type === 'assistant' && msg.message) {
-    const content = msg.message.content as Array<{ type: string; text?: string; name?: string; input?: unknown }>;
-    const textContent = content
-      .filter((block) => block.type === 'text')
-      .map((block) => block.text || '')
-      .join('');
-
-    if (textContent) {
-      client.ws.send(JSON.stringify({
-        type: 'agent_message',
-        agentId,
-        content: textContent,
-        isPartial: false,
-      }));
-    }
-
-    const toolBlocks = content.filter((block) => block.type === 'tool_use');
-    for (const block of toolBlocks) {
-      client.ws.send(JSON.stringify({
-        type: 'agent_tool_use',
-        agentId,
-        toolName: block.name || '',
-        toolInput: block.input || {},
-      }));
-    }
-  } else if (msg.type === 'result') {
-    client.ws.send(JSON.stringify({
-      type: 'agent_result',
-      agentId,
-      result: msg.result || '',
-      stats: {
-        durationMs: msg.duration_ms || 0,
-        totalCostUsd: msg.total_cost_usd || 0,
-        numTurns: msg.num_turns || 0,
-      },
-    }));
-  }
-}
+// Parse JSON bodies
+app.use(express.json());
 
 // WebSocket server
 const wss = new WebSocketServer({ server });
 
-wss.on('connection', (ws) => {
-  console.log('Client connected');
-  const client = createWsHandler(ws);
-  clients.add(client);
+// Message handler for WebSocket connections
+async function handleMessage(ws: WebSocket, message: unknown): Promise<void> {
+  // Validate message structure
+  const validation = validateClientMessage(message);
+  if (!validation.success) {
+    console.warn('Invalid WebSocket message:', validation.error);
+    sendToClient(ws, {
+      type: 'project_error',
+      error: `Invalid message: ${validation.error}`,
+    });
+    return;
+  }
 
-  ws.on('close', () => {
-    console.log('Client disconnected');
-    clients.delete(client);
-  });
-});
+  const msg = validation.data;
 
-// Serve static files from the client build in production
-app.use(express.static(join(__dirname, '../client/dist')));
+  try {
+    switch (msg.type) {
+      case 'subscribe_project': {
+        const projectId = msg.projectId;
+        setClientSubscription(ws, projectId);
+
+        // Send current project state
+        const [project] = await db.select()
+          .from(projects)
+          .where(eq(projects.id, projectId));
+
+        if (project) {
+          // Batch queries
+          const [allArtifacts, allTasks, projectGates, timeline] = await Promise.all([
+            db.select().from(artifacts).where(eq(artifacts.projectId, projectId)),
+            db.select().from(tasks).where(eq(tasks.projectId, projectId)),
+            db.select().from(gates).where(eq(gates.projectId, projectId)),
+            db.select()
+              .from(timelineEvents)
+              .where(eq(timelineEvents.projectId, projectId))
+              .orderBy(asc(timelineEvents.createdAt)),
+          ]);
+
+          const pendingGates = projectGates.filter(g => g.status === 'pending');
+
+          // Parse timeline payloads
+          const parsedTimeline = timeline.map(e => {
+            try {
+              return JSON.parse(e.payload);
+            } catch {
+              return null;
+            }
+          }).filter(Boolean);
+
+          sendToClient(ws, {
+            type: 'project_subscribed',
+            projectId,
+            project,
+            tasks: allTasks,
+            pendingGates,
+            artifacts: allArtifacts,
+            timeline: parsedTimeline,
+          });
+        }
+        break;
+      }
+
+      case 'unsubscribe_project': {
+        setClientSubscription(ws, null);
+        break;
+      }
+
+      case 'create_project': {
+        console.log('Creating project:', msg.name);
+        const projectId = randomUUID();
+        const projectCwd = msg.cwd || process.cwd();
+        const projectDesc = msg.description || '';
+
+        await db.insert(projects).values({
+          id: projectId,
+          name: msg.name,
+          description: projectDesc,
+          cwd: projectCwd,
+          status: 'idle',
+        });
+
+        console.log('Project created:', projectId);
+
+        sendToClient(ws, {
+          type: 'project_created',
+          projectId,
+          name: msg.name,
+          description: projectDesc,
+        });
+
+        // Auto-start the EM with project context as initial request
+        let initialRequest: string;
+
+        if (msg.linearIssueKey) {
+          initialRequest = `Work on Linear issue: ${msg.linearIssueKey}`;
+        } else if (projectDesc) {
+          initialRequest = `Project: ${msg.name}\n\n${projectDesc}`;
+        } else {
+          initialRequest = `Start working on project: ${msg.name}`;
+        }
+
+        broadcastToProject(projectId, {
+          type: 'project_status',
+          projectId,
+          status: 'running',
+        });
+
+        broadcastToProject(projectId, {
+          type: 'agent_message',
+          projectId,
+          agentType: 'user',
+          message: initialRequest,
+          isUserMessage: true,
+        });
+
+        console.log('Starting EM agent for project:', projectId, 'request:', initialRequest.slice(0, 100));
+        runEMAgent({
+          projectId,
+          cwd: projectCwd,
+          request: initialRequest,
+        }).then(() => {
+          console.log('EM agent completed for project:', projectId);
+        }).catch(err => {
+          console.error(`EM Agent failed for project ${projectId}:`, err);
+        });
+
+        break;
+      }
+
+      case 'list_projects': {
+        const allProjects = await db.select().from(projects);
+        sendToClient(ws, {
+          type: 'projects_list',
+          projects: allProjects.map(p => ({
+            _id: p.id,
+            name: p.name,
+            description: p.description,
+            status: p.status,
+          })),
+        });
+        break;
+      }
+
+      case 'send_project_message': {
+        const projectId = msg.projectId;
+        const userMessage = msg.message;
+
+        const [project] = await db.select()
+          .from(projects)
+          .where(eq(projects.id, projectId));
+
+        if (!project) {
+          sendToClient(ws, {
+            type: 'project_error',
+            error: 'Project not found',
+          });
+          break;
+        }
+
+        const msgContent = typeof userMessage === 'string'
+          ? userMessage
+          : userMessage.text || '';
+
+        // Check if project is already running
+        if (project.status === 'running' || project.status === 'waiting_approval') {
+          // Send message to existing EM
+          await sendMessageToEM(projectId, msgContent);
+        } else {
+          // Start new EM session
+          broadcastToProject(projectId, {
+            type: 'project_status',
+            projectId,
+            status: 'running',
+          });
+
+          runEMAgent({
+            projectId,
+            cwd: project.cwd || process.cwd(),
+            request: msgContent,
+          }).catch(err => {
+            console.error(`EM Agent failed for project ${projectId}:`, err);
+          });
+        }
+        break;
+      }
+
+      case 'resolve_gate': {
+        const gateId = msg.gateId;
+        const status = msg.status;
+        const comment = msg.comment;
+
+        const [gate] = await db.select()
+          .from(gates)
+          .where(eq(gates.id, gateId));
+
+        if (!gate) {
+          sendToClient(ws, {
+            type: 'project_error',
+            error: 'Gate not found',
+          });
+          break;
+        }
+
+        await db.update(gates)
+          .set({
+            status,
+            resolution: comment ? JSON.stringify({ comment }) : null,
+            resolvedAt: new Date(),
+          })
+          .where(eq(gates.id, gateId));
+
+        // Update project status back to running
+        await db.update(projects)
+          .set({ status: 'running', updatedAt: new Date() })
+          .where(eq(projects.id, gate.projectId));
+
+        resolveGate(gate.projectId, gateId, status, comment);
+
+        broadcastToProject(gate.projectId, {
+          type: 'gate_resolved',
+          gateId,
+          status,
+        });
+        break;
+      }
+    }
+  } catch (err) {
+    console.error('WebSocket message error:', err);
+  }
+}
+
+// Set up WebSocket with message handler
+setupWebSocket(wss, handleMessage);
+
+// Serve static files from the client build
+const clientDistPath = join(process.cwd(), 'client/dist');
+app.use(express.static(clientDistPath));
+
+// API routes
+app.use('/api', runsRouter);
 
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok' });
+  res.json({ status: 'ok', database: 'sqlite' });
 });
 
-// Get session history for an agent
-app.get('/api/session/:agentId/history', async (req, res) => {
-  try {
-    const { agentId } = req.params;
-    const collections = getCollections();
-
-    // Look up the session in MongoDB to get sessionId and cwd
-    const sessionDoc = await collections.agentSessions.findOne({ agentId });
-
-    if (!sessionDoc || !sessionDoc.sessionId) {
-      res.json({ messages: [] });
-      return;
-    }
-
-    // Read history from disk
-    const messages = readSessionHistory(sessionDoc.sessionId, sessionDoc.cwd);
-    res.json({ messages });
-  } catch (error) {
-    console.error('Failed to get session history:', error);
-    res.status(500).json({ error: 'Failed to get session history' });
-  }
-});
-
-// Fallback to index.html for SPA routing (Express 5 syntax)
+// Fallback to index.html for SPA routing
 app.get('/{*splat}', (_req, res) => {
-  res.sendFile(join(__dirname, '../client/dist/index.html'));
+  res.sendFile(join(clientDistPath, 'index.html'));
 });
 
-// Broadcast change events to subscribed clients and handle task spawning
-function setupChangeStreamBroadcast() {
-  const watcher = getChangeStreamWatcher();
-
-  watcher.subscribe(async (event) => {
-    const message: ServerMessage = {
-      type: 'db_change',
-      collection: event.collection,
-      operation: event.operation,
-      documentId: event.documentId,
-      document: event.document,
-      projectId: event.projectId,
-    };
-
-    // Broadcast to clients subscribed to this project
-    for (const client of clients) {
-      // For project changes, broadcast to all clients
-      // For other collections, only broadcast to subscribed clients
-      const shouldSend =
-        event.collection === 'projects' ||
-        (event.projectId && client.subscribedProjects.has(event.projectId));
-
-      if (shouldSend && client.ws.readyState === client.ws.OPEN) {
-        client.ws.send(JSON.stringify(message));
-      }
-    }
-
-    // Auto-spawn worker agents when tasks are created
-    if (event.collection === 'tasks' && event.operation === 'insert' && event.document) {
-      const task = event.document as Task;
-      // Don't spawn workers for EM tasks - those are handled by the EM itself
-      if (task.assignedAgent !== 'em' && task.status === 'pending') {
-        try {
-          console.log(`Spawning ${task.assignedAgent} worker for task: ${task.title}`);
-          await globalWorkerManager.spawnWorkerForTask(task);
-        } catch (error) {
-          console.error('Failed to spawn worker for task:', error);
-        }
-      }
-    }
-
-    // Notify EM when a worker task completes
-    if (event.collection === 'tasks' && event.operation === 'update' && event.document) {
-      const task = event.document as Task;
-      // Only notify for completed tasks that weren't assigned to EM
-      if (task.status === 'completed' && task.assignedAgent !== 'em' && event.projectId) {
-        // Find the client that has the EM for this project and notify it
-        for (const client of clients) {
-          if (client.subscribedProjects.has(event.projectId)) {
-            try {
-              const taskTitle = task.title || 'Unknown task';
-              const taskResult = task.result || 'No result provided';
-              const notificationMessage = `Task completed by ${task.assignedAgent} agent:
-**Task**: ${taskTitle}
-**Result**: ${taskResult}
-
-Review the work and decide on next steps. You can:
-- Create a follow-up task if more work is needed
-- Create tasks for other agents (architect, developer, qa, reviewer)
-- Ask for human approval via a gate if the work is ready for review`;
-
-              console.log(`Notifying EM for project ${event.projectId} about task completion: ${taskTitle}`);
-              await client.emManager.sendMessageToEM(event.projectId, notificationMessage);
-            } catch (error) {
-              console.error('Failed to notify EM of task completion:', error);
-            }
-            break; // Only notify once
-          }
-        }
-      }
-    }
-
-    // Notify EM when a gate is resolved (approved or changes requested)
-    if (event.collection === 'gates' && event.operation === 'update') {
-      console.log(`[Gate Update] Detected gate update, document:`, event.document ? 'present' : 'missing', 'projectId:', event.projectId);
-      const gate = event.document as Gate;
-      if (!gate) {
-        console.log(`[Gate Update] No document in event, skipping notification`);
-        return;
-      }
-      console.log(`[Gate Update] Gate status: ${gate.status}, projectId: ${event.projectId}`);
-      // Only notify for resolved gates (not pending)
-      if (gate.status !== 'pending' && event.projectId) {
-        for (const client of clients) {
-          if (client.subscribedProjects.has(event.projectId)) {
-            try {
-              const gateTitle = gate.title || 'Unknown gate';
-              const gateDescription = gate.description || 'No description';
-              const reviewerComment = gate.reviewerComment || 'No comment provided';
-              const statusText = gate.status === 'approved' ? '✅ APPROVED' : '⚠️ CHANGES REQUESTED';
-
-              const notificationMessage = `Gate resolved:
-**Gate**: ${gateTitle}
-**Status**: ${statusText}
-**Description**: ${gateDescription}
-**Reviewer Comment**: ${reviewerComment}
-
-${gate.status === 'approved'
-  ? 'The gate was approved. You can now proceed with the next steps in the workflow.'
-  : 'Changes were requested. Create a task to address the feedback, and after that task completes, create a NEW gate for re-approval.'}`;
-
-              console.log(`Notifying EM for project ${event.projectId} about gate resolution: ${gateTitle} - ${gate.status}`);
-              await client.emManager.sendMessageToEM(event.projectId, notificationMessage);
-            } catch (error) {
-              console.error('Failed to notify EM of gate resolution:', error);
-            }
-            break; // Only notify once
-          }
-        }
-      }
-    }
-  });
-}
-
-// Start server with MongoDB connection
+// Start server
 async function start() {
   try {
-    await connectToMongo();
+    console.log('Starting server with SQLite database...');
 
-    // Start change stream watcher
-    const watcher = getChangeStreamWatcher();
-    await watcher.start();
-    setupChangeStreamBroadcast();
+    // Recover any in-progress projects
+    await recoverInProgressProjects();
 
     server.listen(PORT, () => {
       console.log(`Server running on http://localhost:${PORT}`);
@@ -312,9 +298,7 @@ async function start() {
 // Graceful shutdown
 process.on('SIGINT', async () => {
   console.log('\nShutting down...');
-  const watcher = getChangeStreamWatcher();
-  await watcher.stop();
-  await closeMongo();
+  closeDb();
   process.exit(0);
 });
 

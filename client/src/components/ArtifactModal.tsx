@@ -1,7 +1,7 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { Artifact, ArtifactType, Gate } from '../types';
+import type { Artifact, ArtifactType, Gate } from '@shared/types';
 
 // Icon mapping for artifact types
 const ARTIFACT_ICONS: Record<ArtifactType, string> = {
@@ -9,6 +9,7 @@ const ARTIFACT_ICONS: Record<ArtifactType, string> = {
   design_doc: '🏗️',
   code_change: '💻',
   test_report: '🧪',
+  review: '🔍',
   markdown: '📝',
 };
 
@@ -21,7 +22,7 @@ interface ArtifactModalProps {
   onGateCommentChange?: (comment: string) => void;
   onResolveGate?: (
     gateId: string,
-    status: 'approved' | 'changes_requested',
+    status: 'approved' | 'rejected',
     comment?: string
   ) => void;
 }
@@ -34,6 +35,30 @@ export function ArtifactModal({
   onGateCommentChange,
   onResolveGate,
 }: ArtifactModalProps) {
+  const [fetchedContent, setFetchedContent] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+
+  // Fetch artifact content if not available
+  useEffect(() => {
+    if (artifact && !artifact.content && !fetchedContent && !isLoading) {
+      setIsLoading(true);
+      fetch(`/api/artifacts/${artifact.id}`)
+        .then(res => res.json())
+        .then(data => {
+          if (data.artifact?.content) {
+            setFetchedContent(data.artifact.content);
+          }
+        })
+        .catch(err => console.error('Failed to fetch artifact content:', err))
+        .finally(() => setIsLoading(false));
+    }
+  }, [artifact, fetchedContent, isLoading]);
+
+  // Reset fetched content when artifact changes
+  useEffect(() => {
+    setFetchedContent(null);
+  }, [artifact?.id]);
+
   // Handle ESC key to close modal
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -50,8 +75,11 @@ export function ArtifactModal({
 
   if (!artifact) return null;
 
-  const icon = ARTIFACT_ICONS[artifact.type] || '📄';
-  const showGateActions = gate && gate.artifactIds?.includes(artifact._id) && onResolveGate;
+  const displayContent = artifact.content || fetchedContent || '';
+
+  const icon = ARTIFACT_ICONS[artifact.type as ArtifactType] || '📄';
+  // Show gate actions if gate is pending (simplified - no longer checking artifactIds)
+  const showGateActions = gate && gate.status === 'pending' && onResolveGate;
 
   return (
     <div
@@ -71,7 +99,7 @@ export function ArtifactModal({
                 {artifact.type.replace('_', ' ')}
               </span>
               <h2 className="text-base font-bold text-text-primary leading-tight">
-                {artifact.name}
+                {artifact.title}
               </h2>
             </div>
           </div>
@@ -85,18 +113,21 @@ export function ArtifactModal({
 
         {/* Content */}
         <div className="flex-1 overflow-y-auto p-5">
-          <div className="markdown-content">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {artifact.content}
-            </ReactMarkdown>
-          </div>
+          {isLoading ? (
+            <div className="flex items-center justify-center py-8">
+              <div className="w-6 h-6 border-2 border-[#8B5CF6]/30 border-t-[#8B5CF6] rounded-full animate-spin" />
+            </div>
+          ) : (
+            <div className="chat-markdown text-sm">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {displayContent}
+              </ReactMarkdown>
+            </div>
+          )}
         </div>
 
         {/* Footer */}
-        <footer className="flex items-center justify-between px-5 py-3 bg-bg-secondary border-t border-border">
-          <span className="text-xs text-text-muted">
-            Created by {artifact.createdBy}
-          </span>
+        <footer className="flex items-center justify-end px-5 py-3 bg-bg-secondary border-t border-border">
           <button
             className="px-4 py-2 rounded-lg text-sm font-semibold text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors"
             onClick={onClose}
@@ -127,7 +158,7 @@ export function ArtifactModal({
               />
               <button
                 onClick={() => {
-                  onResolveGate(gate._id, 'approved', gateComment || undefined);
+                  onResolveGate(gate.id, 'approved', gateComment || undefined);
                   onClose();
                 }}
                 className="
@@ -142,7 +173,7 @@ export function ArtifactModal({
               </button>
               <button
                 onClick={() => {
-                  onResolveGate(gate._id, 'changes_requested', gateComment);
+                  onResolveGate(gate.id, 'rejected', gateComment);
                   onClose();
                 }}
                 disabled={!gateComment.trim()}

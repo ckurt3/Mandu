@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { AgentState, ServerMessage, ChatMessage, Project, Task, Gate, Artifact, GateStatus } from '../types';
+import type { AgentState, ServerMessage, ChatMessage, Project, Task, Gate, Artifact, MessagePayload, AgentMessageMessage, GateResolvedMessage } from '@shared/types';
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
@@ -49,62 +49,19 @@ export function useWebSocket() {
     };
   }, []);
 
-  // Fetch session history from REST API
-  const fetchSessionHistory = useCallback(async (agentId: string) => {
-    try {
-      const response = await fetch(`/api/session/${agentId}/history`);
-      if (!response.ok) {
-        console.error('Failed to fetch session history');
-        return;
-      }
-
-      const data = await response.json();
-      if (data.messages && data.messages.length > 0) {
-        setAgents(prev => {
-          const updated = new Map(prev);
-          const restoredMessages: ChatMessage[] = data.messages.map((m: {
-            role: 'user' | 'assistant' | 'tool';
-            content: string;
-            toolName?: string;
-            toolInput?: Record<string, unknown>;
-            isToolResult?: boolean;
-            timestamp: number;
-          }, i: number) => ({
-            id: `history-${m.timestamp}-${i}`,
-            role: m.role,
-            content: m.content,
-            toolName: m.toolName,
-            toolInput: m.toolInput,
-            isToolResult: m.isToolResult,
-            timestamp: m.timestamp,
-          }));
-          updated.set(agentId, {
-            id: agentId,
-            status: 'idle',
-            messages: restoredMessages,
-          });
-          return updated;
-        });
-      }
-    } catch (error) {
-      console.error('Error fetching session history:', error);
-    }
-  }, []);
-
   const handleServerMessage = useCallback((message: ServerMessage) => {
     switch (message.type) {
       // Project messages
       case 'projects_list':
         if (message.projects) {
           setProjects(message.projects.map(p => ({
-            _id: p._id,
+            id: p._id,
             name: p.name,
             description: p.description,
-            cwd: '',
-            status: p.status as 'active' | 'archived',
-            emAgentId: p.emAgentId,
-            createdAt: '',
-            updatedAt: '',
+            cwd: null,
+            status: p.status,
+            createdAt: null,
+            updatedAt: null,
           })));
         }
         break;
@@ -112,100 +69,377 @@ export function useWebSocket() {
       case 'project_created':
         if (message.projectId && message.name) {
           setProjects(prev => {
-            // Check if already exists (may come from db_change too)
-            if (prev.some(p => p._id === message.projectId)) {
+            // Check if already exists
+            if (prev.some(p => p.id === message.projectId)) {
               return prev;
             }
             const newProject: Project = {
-              _id: message.projectId,
-              name: message.name,
-              description: '',
-              cwd: '',
-              status: 'active',
-              emAgentId: message.emAgentId,
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
+              id: message.projectId!,
+              name: message.name!,
+              description: message.description || null,
+              cwd: null,
+              status: 'running',
+              createdAt: new Date(),
+              updatedAt: new Date(),
             };
             return [...prev, newProject];
           });
         }
         break;
 
-      case 'project_subscribed':
-        setSubscribedProjectId(message.projectId || null);
-        // Clear project-specific state when switching
-        setTasks([]);
-        setGates([]);
-        setArtifacts([]);
-        // Fetch session history for the EM agent
-        if (message.projectId) {
-          const project = projects.find(p => p._id === message.projectId);
-          if (project?.emAgentId) {
-            fetchSessionHistory(project.emAgentId);
+      case 'project_subscribed': {
+        const projectId = message.projectId || null;
+        setSubscribedProjectId(projectId);
+
+        // Set gates from the subscribed message
+        if (message.pendingGates) {
+          setGates(message.pendingGates);
+        }
+        // Load artifacts from subscription (persisted)
+        if (message.artifacts) {
+          setArtifacts(message.artifacts);
+        } else {
+          setArtifacts([]);
+        }
+        // Load tasks from subscription (persisted)
+        if (message.tasks) {
+          setTasks(message.tasks);
+        } else {
+          setTasks([]);
+        }
+
+        // Process timeline events to restore chat history
+        // The timeline contains all broadcast events in order - replay them
+        if (message.timeline && message.timeline.length > 0) {
+          // Process each timeline event through the message handlers
+          // We need to handle this specially since subscribedProjectId isn't set yet in closure
+          for (const event of message.timeline) {
+            // Skip project_subscribed to avoid infinite recursion
+            if (event.type === 'project_subscribed') continue;
+
+            // Handle each event type inline to avoid closure issues with subscribedProjectId
+            switch (event.type) {
+              case 'agent_message': {
+                const evt = event as AgentMessageMessage;
+
+                // Handle user messages
+                if (evt.isUserMessage) {
+                  const emAgentId = `em-${evt.projectId || projectId}`;
+                  setAgents(prev => {
+                    const updated = new Map(prev);
+                    let agent = updated.get(emAgentId);
+                    if (!agent) {
+                      agent = { id: emAgentId, status: 'idle', messages: [] };
+                    }
+                    const userMessage: ChatMessage = {
+                      id: `timeline-${Date.now()}-${Math.random()}`,
+                      role: 'user',
+                      content: evt.message!,
+                      timestamp: Date.now(),
+                    };
+                    updated.set(emAgentId, {
+                      ...agent,
+                      messages: [...agent.messages, userMessage],
+                    });
+                    return updated;
+                  });
+                  break;
+                }
+
+                // EM uses projectId, workers use taskId
+                const agentId = evt.taskId
+                  ? `${evt.agentType}-${evt.taskId}`
+                  : `em-${evt.projectId || projectId}`;
+
+                // Handle text messages (skip partial messages during replay)
+                if (evt.message !== undefined && !evt.isPartial) {
+                  setAgents(prev => {
+                    const updated = new Map(prev);
+                    let agent = updated.get(agentId);
+                    if (!agent) {
+                      agent = { id: agentId, status: 'idle', messages: [] };
+                    }
+                    const newMessage: ChatMessage = {
+                      id: `timeline-${Date.now()}-${Math.random()}`,
+                      role: 'assistant',
+                      content: evt.message!,
+                      timestamp: Date.now(),
+                      agentType: evt.agentType,
+                    };
+                    updated.set(agentId, {
+                      ...agent,
+                      messages: [...agent.messages, newMessage],
+                    });
+                    return updated;
+                  });
+                }
+
+                // Handle tool use messages
+                if (evt.toolName) {
+                  setAgents(prev => {
+                    const updated = new Map(prev);
+                    let agent = updated.get(agentId);
+                    if (!agent) {
+                      agent = { id: agentId, status: 'idle', messages: [] };
+                    }
+                    const toolMessage: ChatMessage = {
+                      id: evt.toolUseId || `timeline-${Date.now()}-${Math.random()}`,
+                      role: 'tool',
+                      content: '',
+                      toolName: evt.toolName,
+                      toolInput: evt.toolInput,
+                      timestamp: Date.now(),
+                      agentType: evt.agentType,
+                    };
+                    updated.set(agentId, {
+                      ...agent,
+                      messages: [...agent.messages, toolMessage],
+                    });
+                    return updated;
+                  });
+                }
+
+                // Handle tool result messages
+                if (evt.toolResult !== undefined && evt.toolUseId) {
+                  setAgents(prev => {
+                    const updated = new Map(prev);
+                    const agent = updated.get(agentId);
+                    if (!agent) return prev;
+
+                    const messages = agent.messages.map(msg => {
+                      if (msg.id === evt.toolUseId && msg.role === 'tool') {
+                        return { ...msg, toolResult: evt.toolResult, isToolResult: true };
+                      }
+                      return msg;
+                    });
+
+                    updated.set(agentId, { ...agent, messages });
+                    return updated;
+                  });
+                }
+                break;
+              }
+
+              case 'gate_resolved': {
+                const evt = event as GateResolvedMessage;
+                setGates(prev => prev.map(g =>
+                  g.id === evt.gateId
+                    ? { ...g, status: evt.status as 'approved' | 'rejected', resolvedAt: new Date() }
+                    : g
+                ));
+                break;
+              }
+
+              // Other event types are already handled via tasks/gates/artifacts arrays
+              // or don't need replay (project_status, task_started, etc.)
+            }
           }
+        }
+        break;
+      }
+
+      case 'project_status':
+        if (message.projectId) {
+          setProjects(prev => prev.map(p =>
+            p.id === message.projectId
+              ? { ...p, status: message.status }
+              : p
+          ));
+
+          // Update EM agent status when project completes or fails
+          if (message.status === 'completed' || message.status === 'failed') {
+            const emAgentId = `em-${message.projectId}`;
+            setAgents(prev => {
+              const updated = new Map(prev);
+              const agent = updated.get(emAgentId);
+              if (agent) {
+                updated.set(emAgentId, {
+                  ...agent,
+                  status: message.status === 'failed' ? 'error' : 'idle'
+                });
+              }
+              return updated;
+            });
+          }
+        }
+        break;
+
+      case 'task_started':
+        if (message.taskId) {
+          setTasks(prev => [...prev, {
+            id: message.taskId,
+            projectId: message.projectId,
+            agentType: message.agentType,
+            title: `Task for ${message.agentType}`,
+            input: null,
+            output: null,
+            status: 'running',
+            error: null,
+            attempts: 0,
+            createdAt: new Date(),
+            completedAt: null,
+          }]);
+        }
+        break;
+
+      case 'em_waiting': {
+        // EM has delegated to a worker and is now waiting
+        const emAgentId = `em-${message.projectId || subscribedProjectId}`;
+        setAgents(prev => {
+          const updated = new Map(prev);
+          const agent = updated.get(emAgentId);
+          if (agent) {
+            updated.set(emAgentId, { ...agent, status: 'idle' });
+          }
+          return updated;
+        });
+        break;
+      }
+
+      case 'task_completed':
+        if (message.taskId) {
+          setTasks(prev => prev.map(t =>
+            t.id === message.taskId
+              ? { ...t, status: 'completed', completedAt: new Date() }
+              : t
+          ));
+          // Update agent status to idle
+          if (message.agentType) {
+            const agentId = `${message.agentType}-${message.taskId}`;
+            setAgents(prev => {
+              const updated = new Map(prev);
+              const agent = updated.get(agentId);
+              if (agent) {
+                updated.set(agentId, { ...agent, status: 'idle' });
+              }
+              return updated;
+            });
+          }
+        }
+        break;
+
+      case 'task_failed':
+        if (message.taskId) {
+          setTasks(prev => prev.map(t =>
+            t.id === message.taskId
+              ? { ...t, status: 'failed', error: message.error || 'Unknown error' }
+              : t
+          ));
+          // Update agent status to error
+          if (message.agentType) {
+            const agentId = `${message.agentType}-${message.taskId}`;
+            setAgents(prev => {
+              const updated = new Map(prev);
+              const agent = updated.get(agentId);
+              if (agent) {
+                updated.set(agentId, { ...agent, status: 'error' });
+              }
+              return updated;
+            });
+          }
+        }
+        break;
+
+      case 'gate_created':
+        if (message.gate) {
+          setGates(prev => [...prev, {
+            id: message.gate.id,
+            projectId: message.projectId,
+            type: message.gate.type,
+            title: message.gate.title,
+            description: message.gate.description || null,
+            status: 'pending',
+            requestedAt: new Date(),
+            resolvedAt: null,
+            resolvedBy: null,
+            resolution: null,
+          }]);
+          // Set EM to idle while waiting for gate approval
+          const emAgentId = `em-${subscribedProjectId}`;
+          setAgents(prev => {
+            const updated = new Map(prev);
+            const agent = updated.get(emAgentId);
+            if (agent) {
+              updated.set(emAgentId, { ...agent, status: 'idle' });
+            }
+            return updated;
+          });
         }
         break;
 
       case 'gate_resolved':
         if (message.gateId) {
           setGates(prev => prev.map(g =>
-            g._id === message.gateId
-              ? { ...g, status: message.status as GateStatus }
+            g.id === message.gateId
+              ? { ...g, status: message.status as 'approved' | 'rejected', resolvedAt: new Date() }
               : g
           ));
         }
         break;
 
-      // Database change messages
-      case 'db_change':
-        handleDbChange(message);
+      case 'artifact_created':
+        if (message.artifact) {
+          setArtifacts(prev => [...prev, {
+            id: message.artifact.id,
+            projectId: message.projectId,
+            taskId: null,
+            type: message.artifact.type,
+            title: message.artifact.title,
+            content: null,
+            filePath: null,
+            metadata: null,
+            createdAt: new Date(),
+          }]);
+        }
         break;
 
-      // Agent messages
-      case 'agent_created':
-        if (message.agentId) {
+      // Agent messages - for real-time streaming
+      case 'agent_message': {
+        // Handle initial user messages from project creation
+        if (message.isUserMessage) {
+          const emAgentId = `em-${message.projectId || subscribedProjectId}`;
           setAgents(prev => {
             const updated = new Map(prev);
-            updated.set(message.agentId!, {
-              id: message.agentId!,
-              status: 'idle',
-              messages: [],
+            let agent = updated.get(emAgentId);
+            if (!agent) {
+              agent = { id: emAgentId, status: 'thinking', messages: [] };
+            }
+            const userMessage: ChatMessage = {
+              id: `${Date.now()}-user-init`,
+              role: 'user',
+              content: message.message!,
+              timestamp: Date.now(),
+            };
+            updated.set(emAgentId, {
+              ...agent,
+              status: 'thinking',
+              messages: [...agent.messages, userMessage],
             });
             return updated;
           });
+          break;
         }
-        break;
 
-      case 'agent_status':
-        if (message.agentId && message.status) {
-          console.log(`[WS] agent_status: ${message.agentId} -> ${message.status}`);
+        // EM uses projectId, workers use taskId
+        const agentId = message.taskId
+          ? `${message.agentType}-${message.taskId}`
+          : `em-${message.projectId || subscribedProjectId}`;
+
+        // Handle text messages
+        if (message.message !== undefined) {
           setAgents(prev => {
             const updated = new Map(prev);
-            let agent = updated.get(message.agentId!);
+            let agent = updated.get(agentId);
             if (!agent) {
-              console.log(`[WS] Creating new agent: ${message.agentId}`);
-              agent = { id: message.agentId!, status: 'idle', messages: [] };
-            }
-            updated.set(message.agentId!, { ...agent, status: message.status! });
-            return updated;
-          });
-        }
-        break;
-
-      case 'agent_message':
-        if (message.agentId && message.content !== undefined) {
-          setAgents(prev => {
-            const updated = new Map(prev);
-            let agent = updated.get(message.agentId!);
-            if (!agent) {
-              agent = { id: message.agentId!, status: 'idle', messages: [] };
+              agent = { id: agentId, status: 'thinking', messages: [] };
             }
             const newMessage: ChatMessage = {
               id: `${Date.now()}-${Math.random()}`,
               role: 'assistant',
-              content: message.content!,
+              content: message.message!,
               isPartial: message.isPartial,
               timestamp: Date.now(),
+              agentType: message.agentType,
             };
             const messages = [...agent.messages];
             if (messages.length > 0 && messages[messages.length - 1].isPartial) {
@@ -213,201 +447,66 @@ export function useWebSocket() {
             } else {
               messages.push(newMessage);
             }
-            updated.set(message.agentId!, { ...agent, messages });
+            // Set status to thinking when agent is actively sending messages
+            updated.set(agentId, { ...agent, status: 'thinking', messages });
             return updated;
           });
         }
-        break;
 
-      case 'agent_result':
-        if (message.agentId) {
+        // Handle tool use messages
+        if (message.toolName) {
           setAgents(prev => {
             const updated = new Map(prev);
-            const agent = updated.get(message.agentId!);
-            if (agent) {
-              const messages = agent.messages.filter(m => !m.isPartial);
-              updated.set(message.agentId!, { ...agent, messages, status: 'idle' });
-            }
-            return updated;
-          });
-        }
-        break;
-
-      case 'agent_error':
-        if (message.agentId) {
-          setAgents(prev => {
-            const updated = new Map(prev);
-            const agent = updated.get(message.agentId!);
-            if (agent) {
-              const errorMessage: ChatMessage = {
-                id: `${Date.now()}-error`,
-                role: 'assistant',
-                content: `Error: ${message.error}`,
-                timestamp: Date.now(),
-              };
-              updated.set(message.agentId!, {
-                ...agent,
-                messages: [...agent.messages.filter(m => !m.isPartial), errorMessage],
-                status: 'error',
-              });
-            }
-            return updated;
-          });
-        }
-        break;
-
-      case 'agent_tool_use':
-        if (message.agentId) {
-          setAgents(prev => {
-            const updated = new Map(prev);
-            const agent = updated.get(message.agentId!);
-            if (agent) {
-              const toolMessage: ChatMessage = {
-                id: `${Date.now()}-tool-${Math.random()}`,
-                role: 'tool',
-                content: '',
-                toolName: message.toolName,
-                toolInput: message.toolInput,
-                timestamp: Date.now(),
-              };
-              updated.set(message.agentId!, {
-                ...agent,
-                messages: [...agent.messages, toolMessage],
-              });
-            }
-            return updated;
-          });
-        }
-        break;
-
-      case 'agent_tool_result':
-        if (message.agentId) {
-          setAgents(prev => {
-            const updated = new Map(prev);
-            const agent = updated.get(message.agentId!);
-            if (agent) {
-              const resultMessage: ChatMessage = {
-                id: `${Date.now()}-result-${Math.random()}`,
-                role: 'tool',
-                content: message.output || '',
-                isToolResult: true,
-                timestamp: Date.now(),
-              };
-              updated.set(message.agentId!, {
-                ...agent,
-                messages: [...agent.messages, resultMessage],
-              });
-            }
-            return updated;
-          });
-        }
-        break;
-
-      case 'agent_user_message':
-        // Handle replayed user messages from session resumption
-        if (message.agentId && message.content) {
-          setAgents(prev => {
-            const updated = new Map(prev);
-            let agent = updated.get(message.agentId!);
+            let agent = updated.get(agentId);
             if (!agent) {
-              agent = { id: message.agentId!, status: 'idle', messages: [] };
+              agent = { id: agentId, status: 'thinking', messages: [] };
             }
-            const userMessage: ChatMessage = {
-              id: `replay-${Date.now()}-${Math.random()}`,
-              role: 'user',
-              content: message.content!,
+            // Use toolUseId as the message id for matching results later
+            const toolMessage: ChatMessage = {
+              id: (message as { toolUseId?: string }).toolUseId || `${Date.now()}-${Math.random()}`,
+              role: 'tool',
+              content: '',
+              toolName: message.toolName,
+              toolInput: message.toolInput,
               timestamp: Date.now(),
+              agentType: message.agentType,
             };
-            updated.set(message.agentId!, {
+            // Set status to thinking when agent is using tools
+            updated.set(agentId, {
               ...agent,
-              messages: [...agent.messages, userMessage],
+              status: 'thinking',
+              messages: [...agent.messages, toolMessage],
             });
             return updated;
           });
         }
-        break;
 
-      case 'agent_history':
-        // Restore chat history for an agent (on reconnect)
-        if (message.agentId && message.messages) {
+        // Handle tool result messages (update existing tool message with result)
+        if ((message as { toolResult?: string }).toolResult !== undefined && (message as { toolUseId?: string }).toolUseId) {
+          const toolUseId = (message as { toolUseId?: string }).toolUseId!;
+          const toolResult = (message as { toolResult?: string }).toolResult!;
+
           setAgents(prev => {
             const updated = new Map(prev);
-            const restoredMessages: ChatMessage[] = message.messages!.map((m, i) => ({
-              id: `history-${m.timestamp}-${i}`,
-              role: m.role,
-              content: m.content,
-              toolName: m.toolName,
-              toolInput: m.toolInput,
-              isToolResult: m.isToolResult,
-              timestamp: m.timestamp,
-            }));
-            updated.set(message.agentId!, {
-              id: message.agentId!,
-              status: 'idle',
-              messages: restoredMessages,
+            let agent = updated.get(agentId);
+            if (!agent) return prev;
+
+            // Find and update the matching tool message
+            const messages = agent.messages.map(msg => {
+              if (msg.id === toolUseId && msg.role === 'tool') {
+                return { ...msg, toolResult, isToolResult: true };
+              }
+              return msg;
             });
+
+            updated.set(agentId, { ...agent, messages });
             return updated;
           });
         }
         break;
+      }
     }
-  }, [projects, fetchSessionHistory]);
-
-  const handleDbChange = useCallback((message: ServerMessage) => {
-    const { collection, operation, document } = message;
-    if (!collection || !document) return;
-
-    switch (collection) {
-      case 'projects':
-        if (operation === 'insert') {
-          // Only add if not already present (may have been added by project_created)
-          setProjects(prev => {
-            const exists = prev.some(p => p._id === (document as Project)._id);
-            if (exists) return prev;
-            return [...prev, document as Project];
-          });
-        } else if (operation === 'update' || operation === 'replace') {
-          const updated = document as Project;
-          setProjects(prev => prev.map(p => p._id === updated._id ? updated : p));
-        } else if (operation === 'delete') {
-          setProjects(prev => prev.filter(p => p._id !== message.documentId));
-        }
-        break;
-
-      case 'tasks':
-        if (operation === 'insert') {
-          setTasks(prev => [...prev, document as Task]);
-        } else if (operation === 'update' || operation === 'replace') {
-          const updated = document as Task;
-          setTasks(prev => prev.map(t => t._id === updated._id ? updated : t));
-        } else if (operation === 'delete') {
-          setTasks(prev => prev.filter(t => t._id !== message.documentId));
-        }
-        break;
-
-      case 'gates':
-        if (operation === 'insert') {
-          setGates(prev => [...prev, document as Gate]);
-        } else if (operation === 'update' || operation === 'replace') {
-          const updated = document as Gate;
-          setGates(prev => prev.map(g => g._id === updated._id ? updated : g));
-        } else if (operation === 'delete') {
-          setGates(prev => prev.filter(g => g._id !== message.documentId));
-        }
-        break;
-
-      case 'artifacts':
-        if (operation === 'insert') {
-          setArtifacts(prev => [...prev, document as Artifact]);
-        } else if (operation === 'update' || operation === 'replace') {
-          const updated = document as Artifact;
-          setArtifacts(prev => prev.map(a => a._id === updated._id ? updated : a));
-        } else if (operation === 'delete') {
-          setArtifacts(prev => prev.filter(a => a._id !== message.documentId));
-        }
-        break;
-    }
-  }, []);
+  }, [subscribedProjectId]);
 
   // Project operations
   const createProject = useCallback((name: string, description: string, cwd: string, linearIssueKey?: string) => {
@@ -424,6 +523,12 @@ export function useWebSocket() {
 
   const subscribeToProject = useCallback((projectId: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
+      // Clear current state
+      setAgents(new Map());
+      setTasks([]);
+      setGates([]);
+      setArtifacts([]);
+
       wsRef.current.send(JSON.stringify({
         type: 'subscribe_project',
         projectId,
@@ -431,32 +536,39 @@ export function useWebSocket() {
     }
   }, []);
 
-  const sendProjectMessage = useCallback((projectId: string, message: string) => {
+  const sendProjectMessage = useCallback((projectId: string, message: string | MessagePayload) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
-      // Get the EM agent for this project
-      const project = projects.find(p => p._id === projectId);
-      if (project?.emAgentId) {
-        // Add user message to EM agent state and reset status (clear error state)
-        setAgents(prev => {
-          const updated = new Map(prev);
-          let agent = updated.get(project.emAgentId!);
-          if (!agent) {
-            agent = { id: project.emAgentId!, status: 'idle', messages: [] };
-          }
-          const userMessage: ChatMessage = {
-            id: `${Date.now()}-user`,
-            role: 'user',
-            content: message,
-            timestamp: Date.now(),
-          };
-          updated.set(project.emAgentId!, {
-            ...agent,
-            status: 'thinking', // Reset to thinking, clears error state
-            messages: [...agent.messages, userMessage],
-          });
-          return updated;
+      // Build display content for the user message
+      const displayContent = typeof message === 'string' ? message : message.text;
+      const hasAttachments = typeof message !== 'string' && (
+        (message.images?.length ?? 0) > 0 ||
+        (message.pdfs?.length ?? 0) > 0 ||
+        (message.textFiles?.length ?? 0) > 0
+      );
+
+      // Add user message to the EM agent for this project
+      const emAgentId = `em-${projectId}`;
+      setAgents(prev => {
+        const updated = new Map(prev);
+        let agent = updated.get(emAgentId);
+        if (!agent) {
+          agent = { id: emAgentId, status: 'thinking', messages: [] };
+        }
+        const userMessage: ChatMessage = {
+          id: `${Date.now()}-user`,
+          role: 'user',
+          content: hasAttachments
+            ? `${displayContent}${displayContent ? '\n\n' : ''}[Attached files]`
+            : displayContent,
+          timestamp: Date.now(),
+        };
+        updated.set(emAgentId, {
+          ...agent,
+          status: 'thinking',
+          messages: [...agent.messages, userMessage],
         });
-      }
+        return updated;
+      });
 
       wsRef.current.send(JSON.stringify({
         type: 'send_project_message',
@@ -464,9 +576,9 @@ export function useWebSocket() {
         message,
       }));
     }
-  }, [projects]);
+  }, []);
 
-  const resolveGate = useCallback((gateId: string, status: 'approved' | 'changes_requested', comment?: string) => {
+  const resolveGate = useCallback((gateId: string, status: 'approved' | 'rejected', comment?: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'resolve_gate',
@@ -479,89 +591,31 @@ export function useWebSocket() {
 
   // Add a local message to the chat feed (display only, doesn't notify EM)
   const addLocalMessage = useCallback((projectId: string, message: string) => {
-    const project = projects.find(p => p._id === projectId);
-    if (project?.emAgentId) {
-      setAgents(prev => {
-        const updated = new Map(prev);
-        let agent = updated.get(project.emAgentId!);
-        if (!agent) {
-          agent = { id: project.emAgentId!, status: 'idle', messages: [] };
-        }
-        const userMessage: ChatMessage = {
-          id: `${Date.now()}-user`,
-          role: 'user',
-          content: message,
-          timestamp: Date.now(),
-        };
-        updated.set(project.emAgentId!, {
-          ...agent,
-          messages: [...agent.messages, userMessage],
-        });
-        return updated;
-      });
-    }
-  }, [projects]);
-
-  // Legacy agent operations (for standalone agents)
-  const createAgent = useCallback((agentId: string, cwd?: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
-        type: 'create_agent',
-        agentId,
-        cwd,
-      }));
-    }
-  }, []);
-
-  const sendMessage = useCallback((agentId: string, message: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      setAgents(prev => {
-        const updated = new Map(prev);
-        const agent = updated.get(agentId);
-        if (agent) {
-          const userMessage: ChatMessage = {
-            id: `${Date.now()}-user`,
-            role: 'user',
-            content: message,
-            timestamp: Date.now(),
-          };
-          updated.set(agentId, {
-            ...agent,
-            messages: [...agent.messages, userMessage],
-          });
-        }
-        return updated;
-      });
-
-      wsRef.current.send(JSON.stringify({
-        type: 'send_message',
-        agentId,
-        message,
-      }));
-    }
-  }, []);
-
-  const closeAgent = useCallback((agentId: string) => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      wsRef.current.send(JSON.stringify({
-        type: 'close_agent',
-        agentId,
-      }));
-    }
+    const emAgentId = `em-${projectId}`;
     setAgents(prev => {
       const updated = new Map(prev);
-      updated.delete(agentId);
+      let agent = updated.get(emAgentId);
+      if (!agent) {
+        agent = { id: emAgentId, status: 'idle', messages: [] };
+      }
+      const userMessage: ChatMessage = {
+        id: `${Date.now()}-user`,
+        role: 'user',
+        content: message,
+        timestamp: Date.now(),
+      };
+      updated.set(emAgentId, {
+        ...agent,
+        messages: [...agent.messages, userMessage],
+      });
       return updated;
     });
   }, []);
 
   return {
     isConnected,
-    // Legacy agent support
+    // Agent support
     agents: Array.from(agents.values()),
-    createAgent,
-    sendMessage,
-    closeAgent,
     // Project support
     projects,
     tasks,

@@ -1,12 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import type { Gate, Artifact } from '../types';
+import type { Gate, Artifact } from '@shared/types';
 
 interface GateCardProps {
   gate: Gate;
   artifacts: Artifact[];
-  onResolve: (gateId: string, status: 'approved' | 'changes_requested', comment?: string) => void;
+  onResolve: (gateId: string, status: 'approved' | 'rejected', comment?: string) => void;
 }
 
 const ARTIFACT_META: Record<string, { icon: string; label: string }> = {
@@ -15,6 +15,7 @@ const ARTIFACT_META: Record<string, { icon: string; label: string }> = {
   code_change: { icon: '🔧', label: 'Code Change' },
   test_report: { icon: '🧪', label: 'Test Report' },
   markdown: { icon: '📝', label: 'Document' },
+  review: { icon: '🔍', label: 'Review' },
 };
 
 const statusStyles = {
@@ -32,7 +33,7 @@ const statusStyles = {
     labelColor: 'text-green',
     animate: '',
   },
-  changes_requested: {
+  rejected: {
     border: 'border-golden/40 opacity-75',
     iconBg: 'bg-golden/15',
     iconColor: 'text-golden',
@@ -45,7 +46,8 @@ export function GateCard({ gate, artifacts, onResolve }: GateCardProps) {
   const [comment, setComment] = useState('');
   const [modalArtifact, setModalArtifact] = useState<Artifact | null>(null);
 
-  const relatedArtifacts = artifacts.filter(a => gate.artifactIds.includes(a._id));
+  // Show all artifacts for this run (simplified - no longer filtering by artifactIds)
+  const relatedArtifacts = artifacts.filter(a => a.runId === gate.runId);
 
   useEffect(() => {
     const handleEscape = (e: KeyboardEvent) => {
@@ -57,10 +59,10 @@ export function GateCard({ gate, artifacts, onResolve }: GateCardProps) {
     return () => window.removeEventListener('keydown', handleEscape);
   }, [modalArtifact]);
 
-  const handleAction = useCallback((status: 'approved' | 'changes_requested') => {
-    onResolve(gate._id, status, comment || undefined);
+  const handleAction = useCallback((status: 'approved' | 'rejected') => {
+    onResolve(gate.id, status, comment || undefined);
     setComment('');
-  }, [gate._id, comment, onResolve]);
+  }, [gate.id, comment, onResolve]);
 
   const getStatusConfig = () => {
     switch (gate.status) {
@@ -68,13 +70,16 @@ export function GateCard({ gate, artifacts, onResolve }: GateCardProps) {
         return { label: 'Awaiting Review', icon: '◐' };
       case 'approved':
         return { label: 'Approved', icon: '✓' };
-      case 'changes_requested':
+      case 'rejected':
         return { label: 'Changes Requested', icon: '↻' };
+      default:
+        return { label: 'Unknown', icon: '?' };
     }
   };
 
   const statusConfig = getStatusConfig();
-  const styles = statusStyles[gate.status];
+  const gateStatus = gate.status as keyof typeof statusStyles;
+  const styles = statusStyles[gateStatus] || statusStyles.pending;
   const artifactMeta = (type: string) => ARTIFACT_META[type] || { icon: '📄', label: 'Artifact' };
 
   return (
@@ -95,15 +100,17 @@ export function GateCard({ gate, artifacts, onResolve }: GateCardProps) {
         {/* Title & Description */}
         <div className="p-4">
           <h3 className="text-[17px] font-extrabold text-text-primary mb-3 leading-tight">{gate.title}</h3>
-          <div className="markdown-content">
-            <ReactMarkdown remarkPlugins={[remarkGfm]}>
-              {gate.description}
-            </ReactMarkdown>
-          </div>
+          {gate.description && (
+            <div className="chat-markdown text-sm">
+              <ReactMarkdown remarkPlugins={[remarkGfm]}>
+                {gate.description.replace(/\\n/g, '\n')}
+              </ReactMarkdown>
+            </div>
+          )}
           <div className="mt-4 pt-3 border-t border-border/50">
             <span className="flex items-center gap-2">
-              <span className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Requested by</span>
-              <span className="text-xs font-semibold text-orange">{gate.requestedBy}</span>
+              <span className="text-[10px] font-semibold uppercase tracking-wide text-text-muted">Gate Type</span>
+              <span className="text-xs font-semibold text-orange">{gate.type}</span>
             </span>
           </div>
         </div>
@@ -120,14 +127,14 @@ export function GateCard({ gate, artifacts, onResolve }: GateCardProps) {
                 const meta = artifactMeta(artifact.type);
                 return (
                   <button
-                    key={artifact._id}
+                    key={artifact.id}
                     className="w-full flex items-center gap-3 p-3 bg-bg-primary border border-border rounded-lg text-left transition-all hover:border-orange/50 hover:bg-bg-hover group"
                     onClick={() => setModalArtifact(artifact)}
                   >
                     <span className="text-xl">{meta.icon}</span>
                     <div className="flex-1 min-w-0">
                       <span className="block text-[10px] font-semibold uppercase tracking-wide text-orange">{meta.label}</span>
-                      <span className="block text-sm font-semibold text-text-primary truncate">{artifact.name}</span>
+                      <span className="block text-sm font-semibold text-text-primary truncate">{artifact.title}</span>
                     </div>
                     <span className="text-text-muted group-hover:text-orange transition-colors">↗</span>
                   </button>
@@ -157,7 +164,7 @@ export function GateCard({ gate, artifacts, onResolve }: GateCardProps) {
               </button>
               <button
                 className="flex items-center justify-center gap-2 py-3 px-5 rounded-lg font-bold text-sm bg-bg-hover border border-border text-text-secondary hover:bg-golden/15 hover:text-golden hover:border-golden/30 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
-                onClick={() => handleAction('changes_requested')}
+                onClick={() => handleAction('rejected')}
                 disabled={!comment.trim()}
                 title={!comment.trim() ? 'Add feedback to request changes' : ''}
               >
@@ -168,14 +175,14 @@ export function GateCard({ gate, artifacts, onResolve }: GateCardProps) {
           </div>
         )}
 
-        {/* Reviewer Comment */}
-        {gate.reviewerComment && (
+        {/* Resolution comment if available */}
+        {gate.resolution && (
           <div className="mx-4 mb-4 p-3 bg-bg-primary rounded-lg border border-border border-l-[3px] border-l-orange">
             <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-text-muted mb-2">
               <span className="text-sm">💬</span>
               <span>Review Feedback</span>
             </div>
-            <p className="text-sm text-text-secondary leading-relaxed">{gate.reviewerComment}</p>
+            <p className="text-sm text-text-secondary leading-relaxed">{gate.resolution}</p>
           </div>
         )}
       </article>
@@ -196,7 +203,7 @@ export function GateCard({ gate, artifacts, onResolve }: GateCardProps) {
                   <span className="block text-[11px] font-bold uppercase tracking-wide text-orange mb-0.5">
                     {artifactMeta(modalArtifact.type).label}
                   </span>
-                  <h2 className="text-base font-bold text-text-primary leading-tight">{modalArtifact.name}</h2>
+                  <h2 className="text-base font-bold text-text-primary leading-tight">{modalArtifact.title}</h2>
                 </div>
               </div>
               <button
@@ -209,15 +216,14 @@ export function GateCard({ gate, artifacts, onResolve }: GateCardProps) {
             </header>
 
             <div className="flex-1 overflow-y-auto p-5">
-              <div className="markdown-content">
+              <div className="chat-markdown text-sm">
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>
-                  {modalArtifact.content}
+                  {modalArtifact.content || ''}
                 </ReactMarkdown>
               </div>
             </div>
 
-            <footer className="flex items-center justify-between px-5 py-3 bg-bg-secondary border-t border-border">
-              <span className="text-xs text-text-muted">Created by {modalArtifact.createdBy}</span>
+            <footer className="flex items-center justify-end px-5 py-3 bg-bg-secondary border-t border-border">
               <button
                 className="px-4 py-2 rounded-lg text-sm font-semibold text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors"
                 onClick={() => setModalArtifact(null)}
@@ -258,7 +264,7 @@ export function GateCard({ gate, artifacts, onResolve }: GateCardProps) {
                   <button
                     className="flex-1 flex items-center justify-center gap-2 py-2 px-4 rounded-lg font-bold text-sm bg-bg-hover border border-border text-text-secondary hover:bg-golden/15 hover:text-golden hover:border-golden/30 transition-all disabled:opacity-60 disabled:cursor-not-allowed"
                     onClick={() => {
-                      handleAction('changes_requested');
+                      handleAction('rejected');
                       setModalArtifact(null);
                     }}
                     disabled={!comment.trim()}

@@ -1,4 +1,4 @@
-import type { Artifact, ArtifactType } from '../types';
+import type { Artifact, ArtifactType } from '@shared/types';
 
 // Icon mapping for artifact types
 const ARTIFACT_ICONS: Record<ArtifactType, string> = {
@@ -6,6 +6,7 @@ const ARTIFACT_ICONS: Record<ArtifactType, string> = {
   design_doc: '🏗️',
   code_change: '💻',
   test_report: '🧪',
+  review: '🔍',
   markdown: '📝',
 };
 
@@ -15,6 +16,7 @@ const ARTIFACT_TYPE_LABELS: Record<ArtifactType, string> = {
   design_doc: 'Design',
   code_change: 'Code',
   test_report: 'Tests',
+  review: 'Review',
   markdown: 'Doc',
 };
 
@@ -24,8 +26,9 @@ interface ArtifactListItemProps {
 }
 
 // Format relative timestamp
-function formatRelativeTime(dateString: string): string {
-  const date = new Date(dateString);
+function formatRelativeTime(date: Date | null): string {
+  if (!date) return 'recently';
+
   const now = new Date();
   const diffMs = now.getTime() - date.getTime();
   const diffMins = Math.floor(diffMs / (1000 * 60));
@@ -40,8 +43,8 @@ function formatRelativeTime(dateString: string): string {
 }
 
 export function ArtifactListItem({ artifact, onClick }: ArtifactListItemProps) {
-  const icon = ARTIFACT_ICONS[artifact.type] || '📄';
-  const typeLabel = ARTIFACT_TYPE_LABELS[artifact.type] || artifact.type;
+  const icon = ARTIFACT_ICONS[artifact.type as ArtifactType] || '📄';
+  const typeLabel = ARTIFACT_TYPE_LABELS[artifact.type as ArtifactType] || artifact.type;
 
   return (
     <button
@@ -62,15 +65,13 @@ export function ArtifactListItem({ artifact, onClick }: ArtifactListItemProps) {
       <div className="flex-1 min-w-0">
         <div className="flex items-center gap-2">
           <span className="text-sm font-semibold text-text-primary truncate">
-            {artifact.name}
+            {artifact.title}
           </span>
           <span className="flex-shrink-0 px-1.5 py-0.5 rounded text-[9px] font-bold uppercase tracking-wide bg-[#8B5CF6]/10 text-[#A78BFA] border border-[#8B5CF6]/20">
             {typeLabel}
           </span>
         </div>
         <div className="flex items-center gap-2 mt-0.5 text-xs text-text-muted">
-          <span className="font-medium">{artifact.createdBy}</span>
-          <span className="opacity-50">•</span>
           <span>{formatRelativeTime(artifact.createdAt)}</span>
         </div>
       </div>

@@ -2,7 +2,7 @@
 
 Your dev team. All wrapped together.
 
-A multi-agent orchestration system built with the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk) and MongoDB. Mandu coordinates a team of specialized AI agents to handle software development tasks—from requirements to pull request.
+A multi-agent orchestration system built with the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk). Mandu coordinates a team of specialized AI agents to handle software development tasks—from requirements to pull request.
 
 ## How It Works
 
@@ -17,7 +17,7 @@ You chat with an **Engineering Manager (EM)** agent who orchestrates a team of s
 | **Reviewer** | Reviews code quality |
 | **Release Manager** | Creates pull requests via GitHub |
 
-The EM delegates work by creating tasks in MongoDB. The system automatically spawns the appropriate agent when a task is created.
+The EM delegates work by spawning worker agents. All state is persisted locally in SQLite—no external database required.
 
 ### Gates (Human-in-the-Loop)
 
@@ -29,9 +29,8 @@ Three required approval checkpoints keep you in control:
 
 ## MCP Integrations
 
-Mandu uses [Model Context Protocol](https://modelcontextprotocol.io/) servers:
+Mandu uses [Model Context Protocol](https://modelcontextprotocol.io/) servers for external integrations:
 
-- **MongoDB** — Agent coordination, task management, artifacts
 - **Linear** — Create projects from Linear issues, sync with your backlog
 - **GitHub** — Push code, create branches and pull requests
 
@@ -40,7 +39,6 @@ Mandu uses [Model Context Protocol](https://modelcontextprotocol.io/) servers:
 ### Prerequisites
 
 - Node.js 18+
-- MongoDB Atlas account (or local MongoDB)
 - Anthropic API key (for Claude Agent SDK)
 
 ### Installation
@@ -59,33 +57,21 @@ cp .env.example .env
 
 ### Configuration
 
-Edit `.env` with your credentials:
+Edit `.env` if you need custom settings:
 
 ```bash
-# Required
-MONGODB_URI=mongodb+srv://...
-MDB_MCP_CONNECTION_STRING=mongodb+srv://...
+# Optional: Custom database path (defaults to ./data/mandu.db)
+# DATABASE_PATH=./data/mandu.db
 
-# Optional - for Linear integration
-LINEAR_API_KEY=lin_api_...
-
-# Optional - for GitHub integration
-GITHUB_PERSONAL_ACCESS_TOKEN=github_pat_...
+# Optional: Server port (defaults to 3000)
+# PORT=3000
 ```
 
-Create `.mcp.json` for MCP server configuration:
+For MCP integrations (Linear, GitHub), create `.mcp.json`:
 
 ```json
 {
   "mcpServers": {
-    "mongodb": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "mongodb-mcp-server"],
-      "env": {
-        "MDB_MCP_CONNECTION_STRING": "${MDB_MCP_CONNECTION_STRING}"
-      }
-    },
     "github": {
       "type": "http",
       "url": "https://api.githubcopilot.com/mcp/",
@@ -132,13 +118,16 @@ mandu/
 │   ├── index.ts           # Express + WebSocket entry
 │   ├── sessionManager.ts  # Claude Agent SDK sessions
 │   ├── orchestrator/
-│   │   └── emAgent.ts     # Engineering Manager setup
+│   │   ├── emAgent.ts     # Event-driven Engineering Manager
+│   │   ├── workerAgent.ts # Specialist agent spawning
+│   │   └── types.ts       # Orchestration types
 │   ├── agents/
 │   │   ├── em.md          # EM system prompt
-│   │   └── worker.md      # Worker agent prompts
+│   │   ├── pm.md          # PM system prompt
+│   │   └── ...            # Other agent prompts
 │   └── db/
-│       ├── mongo.ts       # MongoDB connection
-│       └── models.ts      # Collection types
+│       ├── client.ts      # SQLite connection (better-sqlite3)
+│       └── schema.ts      # Drizzle ORM schema
 ├── client/
 │   └── src/
 │       ├── App.tsx        # Main app with project management
@@ -156,7 +145,7 @@ mandu/
 - **Backend**: Node.js, Express, WebSocket (ws)
 - **Frontend**: React, Vite, Tailwind CSS
 - **AI**: Claude Agent SDK, Anthropic API
-- **Database**: MongoDB Atlas
+- **Database**: SQLite (better-sqlite3 + Drizzle ORM)
 - **Integrations**: Linear MCP, GitHub MCP
 
 ## License
@@ -165,4 +154,4 @@ AGPL-3.0
 
 ---
 
-Built for the MongoDB AI Agents Hackathon
+Originally built for the MongoDB AI Agents Hackathon, now running on SQLite for zero-config local development.
