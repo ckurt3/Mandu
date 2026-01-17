@@ -90,9 +90,12 @@ export function spawnWorkerAgent(params: SpawnWorkerParams): void {
 }
 
 async function runWorker(params: SpawnWorkerParams): Promise<WorkerResult> {
-  const { taskId, projectId, agentType, input, cwd } = params;
+  const { taskId, projectId, agentType, input } = params;
 
-  console.log(`[Worker ${agentType}] Starting for task ${taskId}`);
+  // Ensure cwd is valid - SDK treats empty string as root "/"
+  const cwd = params.cwd?.trim() || process.cwd();
+
+  console.log(`[Worker ${agentType}] Starting for task ${taskId}, cwd: "${cwd}"`);
 
   const systemPrompt = loadAgentPrompt(agentType);
 

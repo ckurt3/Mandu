@@ -234,7 +234,10 @@ async function runEMTurn(
   session: EMSession,
   userMessage: string
 ): Promise<EMDecision | null> {
-  const { projectId, cwd } = context;
+  const { projectId } = context;
+
+  // Ensure cwd is valid - SDK treats empty string as root "/"
+  const cwd = context.cwd?.trim() || process.cwd();
 
   // Decision will be captured via MCP tool callback
   let decision: EMDecision | null = null;
@@ -479,7 +482,10 @@ async function loadEMSession(projectId: string): Promise<EMSession | null> {
 }
 
 async function executeDecision(context: ProjectContext, decision: EMDecision): Promise<boolean> {
-  const { projectId, cwd } = context;
+  const { projectId } = context;
+
+  // Ensure cwd is valid - SDK treats empty string as root "/"
+  const cwd = context.cwd?.trim() || process.cwd();
 
   switch (decision.type) {
     case 'spawn_worker': {

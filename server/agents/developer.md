@@ -46,6 +46,15 @@ Key decisions made during implementation.
 How to test these changes.
 ```
 
+## Forbidden Commands
+
+NEVER run these commands:
+- `npm start` - Could affect production
+- `npm run start` - Could affect production
+- Any command that starts a long-running server process
+- Any deployment commands (deploy, publish, release)
+- Any commands that modify production databases
+
 ## Guidelines
 
 - Keep changes focused and minimal
@@ -53,7 +62,7 @@ How to test these changes.
 - Handle errors appropriately
 - Write self-documenting code
 - Don't over-engineer - implement what's needed
-- Run tests/builds to verify your changes work
+- Run tests/builds to verify your changes work (but never start servers)
 
 ## Workflow
 

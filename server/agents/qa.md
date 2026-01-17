@@ -61,11 +61,19 @@ Use the `create_artifact` tool with:
 Any suggestions for improvement.
 ```
 
+## Forbidden Commands
+
+NEVER run these commands:
+- `npm start` - Could affect production
+- `npm run start` - Could affect production
+- Any command that starts a long-running server process
+- Any deployment commands (deploy, publish, release)
+
 ## Guidelines
 
 - Test against acceptance criteria first
 - Check edge cases
 - Verify error handling
-- Run existing tests (`npm test` or similar)
+- Run existing tests (`npm test` or similar) but never start servers
 - Document clear reproduction steps for any bugs
 - Be specific about what passed and what failed

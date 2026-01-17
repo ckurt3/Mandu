@@ -96,7 +96,8 @@ async function handleMessage(ws: WebSocket, message: unknown): Promise<void> {
       case 'create_project': {
         console.log('Creating project:', msg.name);
         const projectId = randomUUID();
-        const projectCwd = msg.cwd || process.cwd();
+        // Ensure cwd is a valid path (empty string or whitespace should default)
+        const projectCwd = msg.cwd?.trim() || process.cwd();
         const projectDesc = msg.description || '';
 
         await db.insert(projects).values({
