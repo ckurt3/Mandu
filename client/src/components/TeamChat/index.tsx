@@ -10,7 +10,6 @@ import { useCommandPalette } from './hooks/useCommandPalette';
 import { useMessageHistory } from './hooks/useMessageHistory';
 import { useFileAttachments } from './hooks/useFileAttachments';
 
-import { AgentStatusBar } from './components/AgentStatusBar';
 import { MessageGroup } from './components/MessageGroup';
 import { TypingIndicator } from './components/TypingIndicator';
 import { EmptyState } from './components/EmptyState';
@@ -18,7 +17,6 @@ import { ChatInput } from './components/ChatInput';
 import { GateApprovalBar } from './components/GateApprovalBar';
 import { AgentDetailModal } from './components/AgentDetailModal';
 
-import { ArtifactsPanel } from '../ArtifactsPanel';
 import { ArtifactModal } from '../ArtifactModal';
 
 export function TeamChat({
@@ -44,7 +42,6 @@ export function TeamChat({
   // Gate approval state
   const [gateComment, setGateComment] = useState('');
   const [viewingArtifact, setViewingArtifact] = useState<Artifact | null>(null);
-  const [artifactsPanelOpen, setArtifactsPanelOpen] = useState(false);
 
   // Create a map of active agents by type
   const agentsByType = useMemo(() => {
@@ -213,24 +210,6 @@ export function TeamChat({
 
   return (
     <div className="flex flex-col h-full">
-      {/* Agent Status Bar */}
-      <AgentStatusBar
-        agents={agents}
-        agentsByType={agentsByType}
-        artifacts={artifacts}
-        artifactsPanelOpen={artifactsPanelOpen}
-        onToggleArtifactsPanel={() => setArtifactsPanelOpen(!artifactsPanelOpen)}
-        onSelectAgent={setSelectedAgentType}
-      />
-
-      {/* Artifacts Panel (conditional) */}
-      <ArtifactsPanel
-        artifacts={artifacts}
-        isOpen={artifactsPanelOpen}
-        onClose={() => setArtifactsPanelOpen(false)}
-        onSelectArtifact={setViewingArtifact}
-      />
-
       {/* Chat Messages - Scrollable */}
       <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
         <div className={`max-w-3xl mx-auto px-5 py-4 w-full ${groupedMessages.length === 0 && !pendingGate ? 'flex-1 flex flex-col justify-center' : ''}`}>

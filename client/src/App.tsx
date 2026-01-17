@@ -4,7 +4,9 @@ import { TeamChat } from './components/TeamChat';
 import { SlideMenu } from './components/SlideMenu';
 import { RightPane } from './components/RightPane';
 import { ThemeProvider } from './contexts/ThemeContext';
+import { ArtifactsProvider, useArtifacts } from './contexts/ArtifactsContext';
 import { ThemeToggle } from './components/ThemeToggle';
+import { CenterTopBar, ArtifactViewer } from './components/CenterPane';
 import type { AgentState, Gate, Artifact } from '@shared/types';
 import './styles.css';
 
@@ -161,6 +163,7 @@ function App() {
 
   return (
     <ThemeProvider>
+      <ArtifactsProvider>
       <div className="h-screen flex flex-row bg-bg-primary overflow-hidden">
         {/* Desktop expand button - visible when sidebar is collapsed */}
         <button
@@ -274,9 +277,9 @@ function App() {
 
       </SlideMenu>
 
-      {/* Main Panel - Empty state or placeholder content when no project */}
-      <main className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-br from-bg-primary via-bg-primary to-orange/[0.02]">
-        {!selectedProject && (
+      {/* Main Panel - Center Pane with Artifact Viewer */}
+      <main className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-br from-bg-primary via-bg-primary to-[#8B5CF6]/[0.02]">
+        {!selectedProject ? (
           /* Empty State - No Project Selected */
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
             <div className="w-24 h-24 rounded-3xl bg-orange/10 border border-orange/20 flex items-center justify-center text-5xl mb-6 shadow-[0_0_40px_rgba(255,140,66,0.15)]">
@@ -301,6 +304,17 @@ function App() {
               Create Your First Project
             </button>
           </div>
+        ) : (
+          /* Project Selected - Show CenterTopBar and Content */
+          <CenterPaneContent
+            artifacts={projectArtifacts}
+            projectName={selectedProject.name}
+            pendingGate={pendingGates[0]}
+            resolveGate={resolveGate}
+            addLocalMessage={addLocalMessage}
+            projectId={selectedProject.id}
+            projectGates={projectGates}
+          />
         )}
       </main>
 
@@ -551,7 +565,89 @@ function App() {
         </div>
       )}
       </div>
+      </ArtifactsProvider>
     </ThemeProvider>
+  );
+}
+
+// Center Pane Content - Separate component to use artifacts context
+interface CenterPaneContentProps {
+  artifacts: Artifact[];
+  projectName: string;
+  pendingGate?: Gate;
+  resolveGate: (gateId: string, status: 'approved' | 'rejected', comment?: string) => void;
+  addLocalMessage: (projectId: string, message: string) => void;
+  projectId: string;
+  projectGates: Gate[];
+}
+
+function CenterPaneContent({
+  artifacts,
+  projectName,
+  pendingGate,
+  resolveGate,
+  addLocalMessage,
+  projectId,
+  projectGates,
+}: CenterPaneContentProps) {
+  const { selectedArtifact } = useArtifacts();
+  const [gateComment, setGateComment] = useState('');
+
+  const handleResolveGate = (gateId: string, status: 'approved' | 'rejected', comment?: string) => {
+    resolveGate(gateId, status, comment);
+    const gate = projectGates.find(g => g.id === gateId);
+    const statusText = status === 'approved' ? '✅ Approved' : '↻ Requested changes on';
+    const message = `${statusText} gate: **${gate?.title}**${comment ? `\n\n> ${comment}` : ''}`;
+    addLocalMessage(projectId, message);
+    setGateComment('');
+  };
+
+  return (
+    <>
+      {/* Top Bar with Dropdown */}
+      <CenterTopBar
+        artifacts={artifacts}
+        projectName={projectName}
+      />
+
+      {/* Main Content Area */}
+      {selectedArtifact ? (
+        <ArtifactViewer
+          artifact={selectedArtifact}
+          gate={pendingGate}
+          gateComment={gateComment}
+          onGateCommentChange={setGateComment}
+          onResolveGate={handleResolveGate}
+        />
+      ) : (
+        /* Empty state when no artifact selected */
+        <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
+          <div className="w-20 h-20 rounded-2xl bg-[#8B5CF6]/10 border border-[#8B5CF6]/20 flex items-center justify-center text-4xl mb-5 shadow-[0_0_30px_rgba(139,92,246,0.1)]">
+            📦
+          </div>
+          {artifacts.length > 0 ? (
+            <>
+              <h2 className="text-xl font-bold text-text-primary mb-2">Select an artifact</h2>
+              <p className="text-text-secondary max-w-sm mb-4 text-sm">
+                Click the Artifacts dropdown above to browse {artifacts.length} artifact{artifacts.length !== 1 ? 's' : ''} from your project.
+              </p>
+              <div className="flex items-center gap-2 text-xs text-text-muted">
+                <span className="px-2 py-1 rounded bg-bg-secondary border border-border">
+                  Specs, Designs, Code Changes, Tests
+                </span>
+              </div>
+            </>
+          ) : (
+            <>
+              <h2 className="text-xl font-bold text-text-primary mb-2">No artifacts yet</h2>
+              <p className="text-text-secondary max-w-sm text-sm">
+                Artifacts like specs, design docs, and code changes will appear here as your team works on the project.
+              </p>
+            </>
+          )}
+        </div>
+      )}
+    </>
   );
 }
 

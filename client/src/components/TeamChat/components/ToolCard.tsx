@@ -25,8 +25,8 @@ export function ToolCard({
   const hasMessagesAfter = thisIndex >= 0 && thisIndex < agentMessages.length - 1;
   const isToolRunning = !hasMessagesAfter && !message.isToolResult;
 
-  // Status-based border color (only show when running)
-  const statusBorderColor = isToolRunning ? 'border-l-orange' : 'border-l-transparent';
+  // Status-based border color
+  const statusBorderColor = isToolRunning ? 'border-l-orange' : 'border-l-green';
 
   return (
     <div className="animate-fade-in-up w-full">
