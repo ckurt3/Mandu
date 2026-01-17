@@ -519,3 +519,45 @@ body {
 .shadow-soft {
   box-shadow: 0 4px 20px rgba(0, 0, 0, 0.3);
 }
+
+/* Right pane resize handle */
+.right-pane-resize-handle {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 4px;
+  cursor: ew-resize;
+  transition: background-color 0.15s ease;
+}
+
+.right-pane-resize-handle:hover,
+.right-pane-resize-handle:active {
+  background-color: rgba(255, 140, 66, 0.3);
+}
+
+.right-pane-resize-handle:active {
+  background-color: rgba(255, 140, 66, 0.5);
+}
+
+/* Ensure smooth resizing without text selection */
+.resizing {
+  user-select: none;
+  cursor: ew-resize;
+}
+
+/* Animation for right pane appearing */
+@keyframes slideInFromRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.animate-slide-in-right {
+  animation: slideInFromRight 0.3s ease-out;
+}

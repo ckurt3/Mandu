@@ -2,6 +2,7 @@ import { useCallback, useState, useEffect, useMemo } from 'react';
 import { useWebSocket } from './hooks/useWebSocket';
 import { TeamChat } from './components/TeamChat';
 import { SlideMenu } from './components/SlideMenu';
+import { RightPane } from './components/RightPane';
 import { ThemeProvider } from './contexts/ThemeContext';
 import { ThemeToggle } from './components/ThemeToggle';
 import type { AgentState, Gate, Artifact } from '@shared/types';
@@ -30,15 +31,33 @@ function App() {
   const [newProjectDesc, setNewProjectDesc] = useState('');
   const [newProjectCwd, setNewProjectCwd] = useState('');
   const [linearIssueKey, setLinearIssueKey] = useState('');
-  // Menu state - default to open on desktop
+  // Left Menu state - default to open on desktop
   const [isMenuOpen, setIsMenuOpen] = useState(() => {
     return typeof window !== 'undefined' && window.matchMedia('(min-width: 1024px)').matches;
   });
 
-  // Menu handlers
+  // Left Menu handlers
   const openMenu = useCallback(() => setIsMenuOpen(true), []);
   const closeMenu = useCallback(() => setIsMenuOpen(false), []);
   const toggleMenu = useCallback(() => setIsMenuOpen(prev => !prev), []);
+
+  // Right Pane state - default to open on desktop, persisted via RightPane component
+  const [isRightPaneOpen, setIsRightPaneOpen] = useState(() => {
+    if (typeof window === 'undefined') return true;
+    // Check localStorage for persisted state, default to true on desktop
+    try {
+      const stored = localStorage.getItem('mandu-right-pane-open');
+      if (stored !== null) return JSON.parse(stored);
+    } catch {
+      // Ignore errors
+    }
+    return window.matchMedia('(min-width: 1024px)').matches;
+  });
+
+  // Right Pane handlers
+  const openRightPane = useCallback(() => setIsRightPaneOpen(true), []);
+  const closeRightPane = useCallback(() => setIsRightPaneOpen(false), []);
+  const toggleRightPane = useCallback(() => setIsRightPaneOpen(prev => !prev), []);
 
   // Auto-select first project
   useEffect(() => {
@@ -255,25 +274,9 @@ function App() {
 
       </SlideMenu>
 
-      {/* Main Panel - Team Chat */}
+      {/* Main Panel - Empty state or placeholder content when no project */}
       <main className="flex-1 flex flex-col h-full overflow-hidden bg-gradient-to-br from-bg-primary via-bg-primary to-orange/[0.02]">
-        {selectedProject ? (
-          <TeamChat
-            agents={projectAgents.map(({ agent, type }) => ({ agent, type }))}
-            onSendMessage={(message) => sendProjectMessage(selectedProject.id, message)}
-            projectName={selectedProject.name}
-            gates={projectGates}
-            artifacts={projectArtifacts}
-            sidebarOpen={isMenuOpen}
-            onResolveGate={(gateId, status, comment) => {
-              resolveGate(gateId, status, comment);
-              const gate = projectGates.find(g => g.id === gateId);
-              const statusText = status === 'approved' ? '✅ Approved' : '↻ Requested changes on';
-              const message = `${statusText} gate: **${gate?.title}**${comment ? `\n\n> ${comment}` : ''}`;
-              addLocalMessage(selectedProject.id, message);
-            }}
-          />
-        ) : (
+        {!selectedProject && (
           /* Empty State - No Project Selected */
           <div className="flex-1 flex flex-col items-center justify-center text-center p-8">
             <div className="w-24 h-24 rounded-3xl bg-orange/10 border border-orange/20 flex items-center justify-center text-5xl mb-6 shadow-[0_0_40px_rgba(255,140,66,0.15)]">
@@ -300,6 +303,89 @@ function App() {
           </div>
         )}
       </main>
+
+      {/* Right Pane - Team Chat */}
+      <RightPane
+        isOpen={isRightPaneOpen}
+        onOpen={openRightPane}
+        onClose={closeRightPane}
+        onToggle={toggleRightPane}
+        minWidth={360}
+        maxWidth={700}
+        defaultWidth={480}
+      >
+        {/* Right Pane Header */}
+        <div className="h-[52px] px-3 flex items-center justify-between border-b border-border bg-gradient-to-l from-orange/5 to-transparent flex-shrink-0">
+          {/* Collapse Button - Left Side */}
+          <button
+            className="flex w-9 h-9 items-center justify-center rounded-lg border border-border text-text-muted hover:text-orange hover:border-orange/30 hover:bg-orange/5 transition-all"
+            onClick={toggleRightPane}
+            aria-label="Close chat panel"
+          >
+            <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13 5l7 7-7 7M5 5l7 7-7 7" />
+            </svg>
+          </button>
+          {/* Header Text - Right Aligned */}
+          <div className="flex items-center gap-2">
+            {selectedProject && (
+              <span className="text-xs text-text-muted truncate max-w-[150px]">
+                {selectedProject.name} —
+              </span>
+            )}
+            <h2 className="text-sm font-bold text-text-primary">Team Chat</h2>
+            <span className="text-lg">💬</span>
+          </div>
+        </div>
+
+        {/* Team Chat Content */}
+        <div className="flex-1 min-h-0 overflow-hidden">
+          {selectedProject ? (
+            <TeamChat
+              agents={projectAgents.map(({ agent, type }) => ({ agent, type }))}
+              onSendMessage={(message) => sendProjectMessage(selectedProject.id, message)}
+              projectName={selectedProject.name}
+              projectId={selectedProject.id}
+              gates={projectGates}
+              artifacts={projectArtifacts}
+              isConnected={isConnected}
+              onResolveGate={(gateId, status, comment) => {
+                resolveGate(gateId, status, comment);
+                const gate = projectGates.find(g => g.id === gateId);
+                const statusText = status === 'approved' ? '✅ Approved' : '↻ Requested changes on';
+                const message = `${statusText} gate: **${gate?.title}**${comment ? `\n\n> ${comment}` : ''}`;
+                addLocalMessage(selectedProject.id, message);
+              }}
+            />
+          ) : (
+            /* Empty state when no project selected */
+            <div className="flex-1 flex flex-col items-center justify-center text-center p-6 h-full">
+              <div className="w-16 h-16 rounded-2xl bg-orange/10 border border-orange/20 flex items-center justify-center text-3xl mb-4 opacity-50">
+                💬
+              </div>
+              <p className="text-sm text-text-muted">Select a project to start chatting</p>
+            </div>
+          )}
+        </div>
+      </RightPane>
+
+      {/* Desktop expand button - visible when right pane is collapsed */}
+      <button
+        className={`
+          hidden lg:flex fixed top-3 right-3 z-30
+          w-9 h-9 items-center justify-center
+          rounded-lg border border-border
+          text-text-muted hover:text-orange hover:border-orange/30 hover:bg-orange/5
+          transition-all duration-300
+          ${isRightPaneOpen ? 'opacity-0 pointer-events-none translate-x-2' : 'opacity-100 translate-x-0'}
+        `}
+        onClick={toggleRightPane}
+        aria-label="Expand chat panel"
+      >
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+        </svg>
+      </button>
 
       {/* New Project Modal */}
       {showNewProjectModal && (
