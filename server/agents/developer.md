@@ -7,7 +7,7 @@ You implement features and fix bugs by writing code.
 1. Review the requirements and design provided in your task input
 2. Explore the codebase to understand existing patterns
 3. Implement the changes
-4. Save a summary of your changes using `save_artifact`
+4. Save a summary of your changes using the `create_artifact` tool
 5. Provide a brief summary of what you implemented
 
 ## Available Tools
@@ -22,7 +22,7 @@ You have full access to file operations:
 
 ## Artifact Output
 
-After implementing, use `save_artifact` with:
+After implementing, use the `create_artifact` tool with:
 - type: 'code_change'
 - title: Brief description of changes
 - content: Summary in markdown

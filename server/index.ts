@@ -267,6 +267,24 @@ app.use(express.static(clientDistPath));
 // API routes
 app.use('/api', runsRouter);
 
+// Fetch artifact by ID
+app.get('/api/artifacts/:id', async (req, res) => {
+  try {
+    const [artifact] = await db.select()
+      .from(artifacts)
+      .where(eq(artifacts.id, req.params.id));
+
+    if (!artifact) {
+      return res.status(404).json({ error: 'Artifact not found' });
+    }
+
+    res.json({ artifact });
+  } catch (error) {
+    console.error('Error fetching artifact:', error);
+    res.status(500).json({ error: 'Failed to fetch artifact' });
+  }
+});
+
 // Health check endpoint
 app.get('/api/health', (_req, res) => {
   res.json({ status: 'ok', database: 'sqlite' });

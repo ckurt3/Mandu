@@ -87,11 +87,11 @@ export function ArtifactModal({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-[900px] max-h-[92vh] bg-bg-elevated border border-border rounded-2xl flex flex-col overflow-hidden shadow-modal animate-modal-slide"
+        className="w-full max-w-[900px] h-[85vh] max-h-[92vh] bg-bg-elevated border border-border rounded-2xl flex flex-col overflow-hidden shadow-modal animate-modal-slide"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <header className="flex items-center justify-between px-5 py-3 bg-bg-secondary border-b border-border">
+        <header className="flex-shrink-0 flex items-center justify-between px-5 py-3 bg-bg-secondary border-b border-border">
           <div className="flex items-center gap-3">
             <span className="text-2xl">{icon}</span>
             <div>
@@ -112,7 +112,7 @@ export function ArtifactModal({
         </header>
 
         {/* Content */}
-        <div className="flex-1 overflow-y-auto p-5">
+        <div className="flex-1 min-h-0 overflow-y-auto p-5">
           {isLoading ? (
             <div className="flex items-center justify-center py-8">
               <div className="w-6 h-6 border-2 border-[#8B5CF6]/30 border-t-[#8B5CF6] rounded-full animate-spin" />
@@ -127,7 +127,7 @@ export function ArtifactModal({
         </div>
 
         {/* Footer */}
-        <footer className="flex items-center justify-end px-5 py-3 bg-bg-secondary border-t border-border">
+        <footer className="flex-shrink-0 flex items-center justify-end px-5 py-3 bg-bg-secondary border-t border-border">
           <button
             className="px-4 py-2 rounded-lg text-sm font-semibold text-text-muted hover:text-text-primary hover:bg-bg-hover transition-colors"
             onClick={onClose}
@@ -138,7 +138,7 @@ export function ArtifactModal({
 
         {/* Review Actions - only show if this artifact is part of a pending gate */}
         {showGateActions && (
-          <div className="px-5 py-4 bg-bg-primary border-t border-orange/30">
+          <div className="flex-shrink-0 px-5 py-4 bg-bg-primary border-t border-orange/30">
             <div className="flex items-center gap-2 text-[11px] font-bold uppercase tracking-wide text-orange mb-3">
               <span>⚡</span>
               <span>Submit Review</span>

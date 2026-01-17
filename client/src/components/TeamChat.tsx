@@ -104,6 +104,7 @@ interface TeamChatProps {
   projectName: string;
   gates: Gate[];
   artifacts: Artifact[];
+  sidebarOpen?: boolean;
   onResolveGate: (gateId: string, status: 'approved' | 'changes_requested', comment?: string) => void;
 }
 
@@ -119,7 +120,7 @@ interface ChatMessage {
   timestamp: number;
 }
 
-export function TeamChat({ agents, onSendMessage, projectName, gates, artifacts, onResolveGate }: TeamChatProps) {
+export function TeamChat({ agents, onSendMessage, projectName, gates, artifacts, sidebarOpen = true, onResolveGate }: TeamChatProps) {
   const [input, setInput] = useState('');
   const [expandedTools, setExpandedTools] = useState<Set<string>>(new Set());
   const [selectedAgentType, setSelectedAgentType] = useState<string | null>(null);
@@ -368,7 +369,7 @@ export function TeamChat({ agents, onSendMessage, projectName, gates, artifacts,
   return (
     <div className="flex flex-col h-full">
       {/* Agent Status Bar - Fixed */}
-      <div className="flex-shrink-0 flex items-center gap-3 px-5 py-3 border-b border-border bg-bg-secondary/80 backdrop-blur-sm">
+      <div className={`flex-shrink-0 h-[52px] flex items-center gap-3 border-b border-border bg-bg-secondary/80 backdrop-blur-sm transition-all duration-300 ${sidebarOpen ? 'px-5' : 'pl-14 pr-5 lg:pl-14'}`}>
         {/* Artifacts Tab - only show when artifacts exist */}
         {artifacts.length > 0 && (
           <ArtifactsTab
@@ -429,7 +430,7 @@ export function TeamChat({ agents, onSendMessage, projectName, gates, artifacts,
       />
 
       {/* Chat Messages - Scrollable */}
-      <div className="flex-1 overflow-y-auto min-h-0 flex flex-col">
+      <div className="flex-1 overflow-y-auto overflow-x-hidden min-h-0 flex flex-col">
         <div className={`max-w-3xl mx-auto px-5 py-4 w-full ${groupedMessages.length === 0 && !pendingGate ? 'flex-1 flex flex-col justify-center' : ''}`}>
           {groupedMessages.length === 0 && !pendingGate ? (
             <div className="flex flex-col items-center justify-center text-center">
@@ -623,17 +624,17 @@ export function TeamChat({ agents, onSendMessage, projectName, gates, artifacts,
                 <div className="w-9 h-9 rounded-xl bg-orange/15 border border-orange/30 flex items-center justify-center text-lg flex-shrink-0">
                   🥟
                 </div>
-                <div className="flex flex-col gap-1.5 flex-1 max-w-[85%]">
+                <div className="flex flex-col gap-1.5 min-w-0 max-w-[75%]">
                   <div className="flex items-center gap-2 px-1">
                     <span className="text-xs font-bold text-orange">Mandu</span>
                     <span className="px-1.5 py-0.5 rounded-full bg-orange/20 text-[9px] font-bold text-orange">
                       needs review
                     </span>
                   </div>
-                  <div className="bg-bg-elevated border border-orange/30 rounded-2xl rounded-tl-md p-4">
+                  <div className="bg-bg-elevated border border-orange/30 rounded-2xl rounded-tl-md p-4 overflow-hidden">
                     <h4 className="text-sm font-bold text-text-primary mb-2">{pendingGate.title}</h4>
                     {pendingGate.description && (
-                      <div className="text-sm text-text-secondary leading-relaxed markdown-content">
+                      <div className="text-sm text-text-secondary leading-relaxed markdown-content overflow-x-auto">
                         <ReactMarkdown remarkPlugins={[remarkGfm]}>
                           {pendingGate.description}
                         </ReactMarkdown>

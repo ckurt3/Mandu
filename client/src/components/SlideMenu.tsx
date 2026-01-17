@@ -207,11 +207,11 @@ export function SlideMenu({ isOpen, onClose, onOpen, onToggle, children }: Slide
       <button
         ref={triggerRef}
         className={`
-          fixed top-3 left-4 z-30
-          w-10 h-10 flex items-center justify-center
-          bg-bg-secondary border border-border rounded-xl
-          text-orange hover:bg-bg-hover hover:border-orange/30
-          transition-all duration-200 shadow-soft
+          fixed top-3 left-3 z-30
+          w-9 h-9 flex items-center justify-center
+          rounded-lg border border-border
+          text-text-muted hover:text-orange hover:border-orange/30 hover:bg-orange/5
+          transition-all duration-200
           lg:hidden
           ${isOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}
         `}
@@ -220,8 +220,8 @@ export function SlideMenu({ isOpen, onClose, onOpen, onToggle, children }: Slide
         aria-expanded={isOpen}
         aria-controls="main-navigation"
       >
-        <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" />
+        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
         </svg>
       </button>
 

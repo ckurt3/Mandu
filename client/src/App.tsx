@@ -147,67 +147,61 @@ function App() {
         <button
           className={`
             hidden lg:flex fixed top-3 left-3 z-30
-            w-10 h-10 items-center justify-center
-            bg-bg-secondary border border-border rounded-xl
-            text-text-muted hover:text-orange hover:border-orange/30 hover:bg-bg-hover
-            transition-all duration-300 shadow-soft
+            w-9 h-9 items-center justify-center
+            rounded-lg border border-border
+            text-text-muted hover:text-orange hover:border-orange/30 hover:bg-orange/5
+            transition-all duration-300
             ${isMenuOpen ? 'opacity-0 pointer-events-none -translate-x-2' : 'opacity-100 translate-x-0'}
           `}
           onClick={toggleMenu}
           aria-label="Expand sidebar"
         >
-          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2.5} d="M4 6h16M4 12h16M4 18h16" />
+          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
           </svg>
         </button>
 
         {/* Slide Menu with Sidebar Content */}
         <SlideMenu isOpen={isMenuOpen} onOpen={openMenu} onClose={closeMenu} onToggle={toggleMenu}>
-          {/* Brand Header */}
-          <div className="p-5 border-b border-border bg-gradient-to-br from-orange/5 via-transparent to-transparent">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-3">
-                <div className="w-12 h-12 rounded-xl bg-orange/15 border border-orange/25 flex items-center justify-center text-2xl shadow-[0_0_20px_rgba(255,140,66,0.1)]">
-                  🥟
-                </div>
-                <div>
-                  <h1 className="text-xl font-extrabold text-orange tracking-tight">Mandu</h1>
-                </div>
-              </div>
-              {/* Theme Toggle + Collapse Button (desktop) */}
-              <div className="flex items-center gap-1">
-                <ThemeToggle />
-                <button
-                  className="flex w-9 h-9 items-center justify-center rounded-lg border border-border text-text-muted hover:text-orange hover:border-orange/30 hover:bg-orange/5 transition-all"
-                  onClick={toggleMenu}
-                  aria-label="Close sidebar"
-                >
-                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
-                  </svg>
-                </button>
-              </div>
+          {/* Brand Header - compact top bar, matches main panel height */}
+          <div className="h-[52px] px-3 flex items-center justify-between border-b border-border bg-gradient-to-r from-orange/5 to-transparent">
+            <div className="flex items-center gap-2">
+              <span className="text-2xl">🥟</span>
+              <h1 className="text-lg font-extrabold text-orange tracking-tight">Mandu</h1>
+              {/* Connection indicator */}
+              <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green animate-pulse' : 'bg-red'}`} title={isConnected ? 'Connected' : 'Disconnected'} />
             </div>
-
-          {/* Connection Status */}
-          <div className={`
-            flex items-center gap-2 mt-4 px-2.5 py-1.5 rounded-lg text-xs font-semibold
-            ${isConnected
-              ? 'bg-green/10 text-green border border-green/20'
-              : 'bg-red/10 text-red border border-red/20'
-            }
-          `}>
-            <span className={`w-2 h-2 rounded-full ${isConnected ? 'bg-green animate-pulse' : 'bg-red'}`} />
-            {isConnected ? 'Connected' : 'Disconnected'}
+            {/* Theme Toggle + Collapse Button */}
+            <div className="flex items-center gap-1">
+              <ThemeToggle />
+              <button
+                className="flex w-9 h-9 items-center justify-center rounded-lg border border-border text-text-muted hover:text-orange hover:border-orange/30 hover:bg-orange/5 transition-all"
+                onClick={toggleMenu}
+                aria-label="Close sidebar"
+              >
+                <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 19l-7-7 7-7m8 14l-7-7 7-7" />
+                </svg>
+              </button>
+            </div>
           </div>
-        </div>
 
         {/* Projects Section Header */}
         <div className="flex items-center justify-between px-4 py-3">
           <span className="text-[11px] font-bold uppercase tracking-wider text-text-muted">Projects</span>
-          <span className="bg-orange/10 text-orange text-[11px] font-bold px-2 py-0.5 rounded-md border border-orange/20">
-            {projects.length}
-          </span>
+          <button
+            className="
+              w-7 h-7 rounded-lg bg-orange hover:bg-orange-dark active:scale-95
+              text-white font-bold text-lg flex items-center justify-center
+              transition-all duration-150 shadow-[0_2px_8px_rgba(255,140,66,0.3)]
+              disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none
+            "
+            onClick={() => setShowNewProjectModal(true)}
+            disabled={!isConnected}
+            aria-label="New project"
+          >
+            +
+          </button>
         </div>
 
         {/* Projects List */}
@@ -259,23 +253,6 @@ function App() {
           )}
         </div>
 
-        {/* New Project Button */}
-        <div className="p-3 border-t border-border">
-          <button
-            className="
-              w-full bg-orange hover:bg-orange-dark active:scale-[0.98]
-              text-white font-bold py-3.5 px-4 rounded-xl
-              flex items-center justify-center gap-2
-              transition-all duration-150 shadow-[0_4px_12px_rgba(255,140,66,0.25)]
-              disabled:opacity-50 disabled:cursor-not-allowed disabled:shadow-none
-            "
-            onClick={() => setShowNewProjectModal(true)}
-            disabled={!isConnected}
-          >
-            <span className="text-lg">+</span>
-            New Project
-          </button>
-        </div>
       </SlideMenu>
 
       {/* Main Panel - Team Chat */}
@@ -287,6 +264,7 @@ function App() {
             projectName={selectedProject.name}
             gates={projectGates}
             artifacts={projectArtifacts}
+            sidebarOpen={isMenuOpen}
             onResolveGate={(gateId, status, comment) => {
               resolveGate(gateId, status, comment);
               const gate = projectGates.find(g => g.id === gateId);

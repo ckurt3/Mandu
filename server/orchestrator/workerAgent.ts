@@ -3,11 +3,11 @@ import { readFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { db } from '../db/client.js';
-import { tasks, artifacts, agentSessions } from '../db/schema.js';
+import { tasks, agentSessions } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import type { SpawnWorkerParams, WorkerResult } from './types.js';
-import { randomUUID } from 'crypto';
 import { broadcastToProject } from '../websocket.js';
+import { createWorkerMcpServer } from './workerTools.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -29,12 +29,10 @@ function loadAgentPrompt(agentType: string): string {
   return readFileSync(promptPath, 'utf-8');
 }
 
-// Artifact info extracted from worker output
-interface ArtifactInfo {
+// Track artifact titles created via MCP tool
+interface ArtifactRef {
   type: string;
   title: string;
-  content?: string;
-  filePath?: string;
 }
 
 // Checkpoint worker session to database - only stores SDK session ID
@@ -94,24 +92,25 @@ export function spawnWorkerAgent(params: SpawnWorkerParams): void {
 async function runWorker(params: SpawnWorkerParams): Promise<WorkerResult> {
   const { taskId, projectId, agentType, input, cwd } = params;
 
+  console.log(`[Worker ${agentType}] Starting for task ${taskId}`);
+
   const systemPrompt = loadAgentPrompt(agentType);
 
-  // Track artifacts created by this worker
-  const savedArtifacts: ArtifactInfo[] = [];
+  // Track artifacts created via MCP tool (for summary)
+  const savedArtifacts: ArtifactRef[] = [];
 
-  // Build the prompt - workers use standard tools and report artifacts in structured format
+  // Create MCP server with worker tools - artifacts are saved via tool call
+  console.log(`[Worker ${agentType}] Creating MCP server...`);
+  const workerMcpServer = createWorkerMcpServer(projectId, taskId);
+  console.log(`[Worker ${agentType}] MCP server created`);
+
+  // Build the prompt - workers use standard tools and create_artifact for deliverables
   const taskPrompt = `Task input:
 ${JSON.stringify(input, null, 2)}
 
 Complete this task. Use the standard file tools (Read, Write, Edit, Bash) as needed.
 
-When you create deliverables, output them in this format:
-\`\`\`artifact
-type: spec|design_doc|code_change|test_report|review|markdown
-title: Short descriptive title
-content: The full content here (optional if filePath provided)
-filePath: Path to file if relevant (optional)
-\`\`\`
+When you create deliverables (specs, designs, code change summaries, test reports, reviews), save them using the create_artifact tool.
 
 When you're done, provide a brief summary of what you accomplished.`;
 
@@ -128,11 +127,16 @@ When you're done, provide a brief summary of what you accomplished.`;
         systemPrompt,
         // Use built-in claude_code tools
         tools: { type: 'preset', preset: 'claude_code' },
+        // Add worker tools (create_artifact) via MCP
+        mcpServers: {
+          'worker-tools': workerMcpServer,
+        },
         // Enable streaming for real-time text updates
         includePartialMessages: true,
       },
     };
 
+    console.log(`[Worker ${agentType}] Starting SDK query...`);
     const queryInstance = query(queryOptions);
 
     let summary = '';
@@ -140,6 +144,7 @@ When you're done, provide a brief summary of what you accomplished.`;
     let accumulatedStreamText = '';
 
     for await (const sdkMessage of queryInstance) {
+      console.log(`[Worker ${agentType}] SDK message type: ${sdkMessage.type}`);
       // Capture the SDK session ID
       if ('session_id' in sdkMessage && sdkMessage.session_id) {
         sdkSessionId = sdkMessage.session_id;
@@ -178,107 +183,27 @@ When you're done, provide a brief summary of what you accomplished.`;
           if (block.type === 'text' && block.text) {
             summary = block.text;
 
-            // Parse artifact blocks from text output FIRST (before sending to chat)
-            const artifactMatches = [...block.text.matchAll(/```artifact\n([\s\S]*?)```/g)];
-
-            for (const match of artifactMatches) {
-              const artifactText = match[1];
-              const artifact: ArtifactInfo = { type: 'markdown', title: 'Untitled' };
-
-              // Parse header fields (type, title, filePath) and extract content
-              const lines = artifactText.split('\n');
-              let contentStartIdx = -1;
-
-              for (let i = 0; i < lines.length; i++) {
-                const line = lines[i];
-                const colonIdx = line.indexOf(':');
-                if (colonIdx > 0) {
-                  const key = line.slice(0, colonIdx).trim().toLowerCase();
-                  const value = line.slice(colonIdx + 1).trim();
-                  if (key === 'type') artifact.type = value;
-                  else if (key === 'title') artifact.title = value;
-                  else if (key === 'filepath' || key === 'filepath') artifact.filePath = value;
-                  else if (key === 'content') {
-                    // Content starts here - value may be on same line or continue on next lines
-                    if (value) {
-                      // If content is on same line, capture rest of artifact as content
-                      contentStartIdx = i;
-                      const contentLines = [value, ...lines.slice(i + 1)];
-                      artifact.content = contentLines.join('\n').trim();
-                    }
-                    break;
-                  }
-                }
-              }
-
-              // If no content field found but there's text after headers, use that
-              if (!artifact.content && contentStartIdx === -1) {
-                // Find where headers end (first line without a colon key pattern)
-                let headerEnd = 0;
-                for (let i = 0; i < lines.length; i++) {
-                  const line = lines[i].trim();
-                  if (line && !line.match(/^(type|title|filepath|content):/i)) {
-                    headerEnd = i;
-                    break;
-                  }
-                  headerEnd = i + 1;
-                }
-                if (headerEnd < lines.length) {
-                  artifact.content = lines.slice(headerEnd).join('\n').trim();
-                }
-              }
-
-              // Save artifact to database
-              const artifactId = randomUUID();
-              await db.insert(artifacts).values({
-                id: artifactId,
-                projectId,
-                taskId,
-                type: artifact.type,
-                title: artifact.title,
-                content: artifact.content,
-                filePath: artifact.filePath,
-              });
-
-              // Broadcast artifact creation to clients
-              broadcastToProject(projectId, {
-                type: 'artifact_created',
-                projectId,
-                artifact: {
-                  id: artifactId,
-                  type: artifact.type,
-                  title: artifact.title,
-                },
-              });
-
-              savedArtifacts.push(artifact);
-            }
-
-            // Strip artifact blocks from text before sending to chat
-            let displayText = block.text;
-            for (const match of artifactMatches) {
-              displayText = displayText.replace(match[0], '');
-            }
-            displayText = displayText.trim();
-
             // Reset accumulated stream text after complete message
             accumulatedStreamText = '';
 
-            // Only send non-empty text to chat (skip if it was just an artifact block)
-            if (displayText) {
-              // Broadcast final complete message (persisted)
-              broadcastToProject(projectId, {
-                type: 'agent_message',
-                projectId,
-                taskId,
-                agentType,
-                message: displayText,
-              });
-            }
+            // Broadcast final complete message (persisted)
+            broadcastToProject(projectId, {
+              type: 'agent_message',
+              projectId,
+              taskId,
+              agentType,
+              message: block.text,
+            });
           }
 
           // Broadcast tool use to clients (so they appear in chat)
           if (block.type === 'tool_use' && block.name && block.input) {
+            // Track artifact creation for summary
+            if (block.name === 'create_artifact') {
+              const artifactInput = block.input as { type: string; title: string };
+              savedArtifacts.push({ type: artifactInput.type, title: artifactInput.title });
+            }
+
             broadcastToProject(projectId, {
               type: 'agent_message',
               projectId,
@@ -361,12 +286,15 @@ When you're done, provide a brief summary of what you accomplished.`;
     // Ensure summary is never empty (API rejects empty text content blocks)
     const finalSummary = (summary + artifactSummary).trim() || 'Task completed successfully.';
 
+    console.log(`[Worker ${agentType}] Completed successfully. Artifacts: ${savedArtifacts.length}`);
+
     return {
       success: true,
       taskId,
       summary: finalSummary,
     };
   } catch (error) {
+    console.error(`[Worker ${agentType}] Error:`, error);
     // Checkpoint with failed status
     await checkpointWorkerSession(taskId, projectId, agentType, sdkSessionId, 'failed');
 

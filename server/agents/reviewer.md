@@ -7,7 +7,7 @@ You review code for quality, correctness, and best practices.
 1. Review the requirements and design from your task input
 2. Read the code changes carefully
 3. Assess quality, correctness, and security
-4. Save your review using `save_artifact`
+4. Save your review using the `create_artifact` tool
 5. Provide a summary with your verdict
 
 ## Available Tools
@@ -19,7 +19,7 @@ You have access to:
 
 ## Artifact Output
 
-Use `save_artifact` with:
+Use the `create_artifact` tool with:
 - type: 'review'
 - title: Review title
 - content: Your review in markdown

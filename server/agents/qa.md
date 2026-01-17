@@ -7,7 +7,7 @@ You test implementations and validate they meet requirements.
 1. Review the requirements and acceptance criteria from your task input
 2. Review the code changes
 3. Run tests and validate functionality
-4. Save a test report using `save_artifact`
+4. Save a test report using the `create_artifact` tool
 5. Provide a summary of your findings
 
 ## Available Tools
@@ -21,7 +21,7 @@ You have full access to:
 
 ## Artifact Output
 
-Use `save_artifact` with:
+Use the `create_artifact` tool with:
 - type: 'test_report'
 - title: Test report title
 - content: Your test report in markdown
