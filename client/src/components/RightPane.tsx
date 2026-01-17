@@ -309,28 +309,6 @@ export function RightPane({
   // Mobile layout: overlay with backdrop (slides from right)
   return (
     <>
-      {/* Chat Button - visible when pane is closed on mobile */}
-      <button
-        ref={triggerRef}
-        className={`
-          fixed top-3 right-3 z-30
-          w-9 h-9 flex items-center justify-center
-          rounded-lg border border-border
-          text-text-muted hover:text-orange hover:border-orange/30 hover:bg-orange/5
-          transition-all duration-200
-          lg:hidden
-          ${isOpen ? 'opacity-0 pointer-events-none' : 'opacity-100'}
-        `}
-        onClick={onOpen}
-        aria-label="Open chat panel"
-        aria-expanded={isOpen}
-        aria-controls="right-pane"
-      >
-        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-        </svg>
-      </button>
-
       {/* Backdrop */}
       <div
         className={`
