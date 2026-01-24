@@ -813,16 +813,79 @@ body {
 .d2h-diff-table {
   font-family: var(--font-mono);
   font-size: 12px;
+  border-collapse: collapse;
+  border-spacing: 0 !important;
+  background: var(--color-bg-elevated);
+}
+
+.d2h-diff-table tbody {
+  border-spacing: 0 !important;
+  background: var(--color-bg-elevated);
+}
+
+.d2h-diff-table tr {
+  border: none !important;
+  border-spacing: 0 !important;
+  line-height: 20px !important;
+  height: 20px;
+}
+
+.d2h-diff-table td {
+  padding: 0 !important;
+  border: none !important;
+  line-height: 20px !important;
+  height: 20px;
+  vertical-align: top !important;
+}
+
+/* Remove gaps between diff rows */
+.d2h-diff-tbody tr,
+.d2h-code-wrapper {
+  border-spacing: 0;
+}
+
+.d2h-code-line,
+.d2h-code-side-line {
+  line-height: 20px !important;
+  padding: 0 !important;
+  margin: 0 !important;
+}
+
+.d2h-code-line-ctn {
+  line-height: 20px !important;
+  padding: 0 10px !important;
 }
 
 /* Line number columns */
 .d2h-code-linenumber {
   color: var(--color-text-muted);
   background: var(--color-bg-secondary);
-  border-right: 1px solid var(--color-border);
   user-select: none;
-  cursor: pointer;
   font-size: 11px;
+  line-height: 20px !important;
+}
+
+.d2h-code-linenumber .line-num1,
+.d2h-code-linenumber .line-num2 {
+  color: var(--color-text-muted);
+  background: transparent !important;
+  user-select: none;
+  font-size: 11px;
+  line-height: 20px !important;
+}
+
+.d2h-code-linenumber {
+  border: none !important;
+  border-right: 1px solid var(--color-border) !important;
+  cursor: pointer;
+}
+
+/* Make line number divs inline so they don't add height */
+.diff2html-wrapper .d2h-code-linenumber .line-num1,
+.diff2html-wrapper .d2h-code-linenumber .line-num2,
+.d2h-diff-table .d2h-code-linenumber .line-num1,
+.d2h-diff-table .d2h-code-linenumber .line-num2 {
+  display: inline-block !important;
 }
 
 /* Hover effect for line numbers (for future commenting) */
@@ -855,12 +918,19 @@ body {
 }
 
 /* ===== Diff Colors - Addition (Green) ===== */
-.d2h-ins {
+.d2h-diff-table tr:has(.d2h-ins) {
   background-color: rgba(74, 222, 128, 0.15) !important;
 }
 
+.d2h-ins {
+  background-color: transparent !important;
+  border: none !important;
+}
+
+.d2h-ins .d2h-code-line,
 .d2h-ins .d2h-code-line-ctn {
-  background-color: rgba(74, 222, 128, 0.15) !important;
+  background-color: transparent !important;
+  border: none !important;
 }
 
 .d2h-ins .d2h-code-linenumber,
@@ -880,12 +950,19 @@ ins.d2h-change {
 }
 
 /* ===== Diff Colors - Deletion (Red) ===== */
-.d2h-del {
+.d2h-diff-table tr:has(.d2h-del) {
   background-color: rgba(248, 113, 113, 0.15) !important;
 }
 
+.d2h-del {
+  background-color: transparent !important;
+  border: none !important;
+}
+
+.d2h-del .d2h-code-line,
 .d2h-del .d2h-code-line-ctn {
-  background-color: rgba(248, 113, 113, 0.15) !important;
+  background-color: transparent !important;
+  border: none !important;
 }
 
 .d2h-del .d2h-code-linenumber,
@@ -905,8 +982,19 @@ del.d2h-change {
 }
 
 /* ===== Context/Unchanged Lines ===== */
-.d2h-cntx {
+.d2h-diff-table tr:has(.d2h-cntx) {
   background: var(--color-bg-elevated) !important;
+}
+
+.d2h-cntx {
+  background: transparent !important;
+  border: none !important;
+}
+
+.d2h-cntx .d2h-code-line,
+.d2h-cntx .d2h-code-line-ctn {
+  background: transparent !important;
+  border: none !important;
 }
 
 .d2h-cntx .d2h-code-linenumber,
@@ -914,15 +1002,23 @@ del.d2h-change {
   background: var(--color-bg-secondary) !important;
 }
 
-.d2h-cntx .d2h-code-line-ctn {
-  background: var(--color-bg-elevated) !important;
+/* ===== Info/Hunk Headers (e.g., @@ -1,5 +1,7 @@) ===== */
+.d2h-diff-table tr:has(.d2h-info) {
+  background: var(--color-bg-secondary) !important;
 }
 
-/* ===== Info/Hunk Headers (e.g., @@ -1,5 +1,7 @@) ===== */
 .d2h-info {
-  background: var(--color-bg-secondary) !important;
+  background: transparent !important;
   color: var(--color-text-muted) !important;
   font-size: 11px;
+  border: none !important;
+}
+
+.d2h-info .d2h-code-line,
+.d2h-info .d2h-code-line-ctn {
+  background: transparent !important;
+  color: var(--color-text-muted) !important;
+  border: none !important;
 }
 
 
