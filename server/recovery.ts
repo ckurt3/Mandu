@@ -1,7 +1,7 @@
 import { db } from './db/client.js';
-import { projects } from './db/schema.js';
+import { projects, workspaces } from './db/schema.js';
 import { eq, or } from 'drizzle-orm';
-import { runEMAgent } from './orchestrator/emAgent.js';
+import { runEMAgent, getProjectCwd } from './orchestrator/emAgent.js';
 
 // Recovery runs sequentially to prevent race conditions
 let recoveryInProgress = false;
@@ -37,9 +37,10 @@ export async function recoverInProgressProjects(): Promise<void> {
 
       // For running, resume the EM agent and wait for it to initialize
       try {
+        const projectCwd = await getProjectCwd(project.id);
         await runEMAgent({
           projectId: project.id,
-          cwd: project.cwd || process.cwd(),
+          cwd: projectCwd,
           request: '', // Empty request for recovery - EM will continue from session
         });
         console.log(`Recovered project ${project.id}`);

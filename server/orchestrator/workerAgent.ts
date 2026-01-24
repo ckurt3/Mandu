@@ -8,6 +8,16 @@ import { eq } from 'drizzle-orm';
 import type { SpawnWorkerParams, WorkerResult } from './types.js';
 import { broadcastToProject } from '../websocket.js';
 import { createWorkerMcpServer } from './workerTools.js';
+import {
+  registerAgent,
+  unregisterAgent,
+  isAgentPaused,
+  setResumeCallback,
+  getAbortSignal,
+  getPendingMessages,
+  updateAgentTodos,
+} from './agentController.js';
+import type { TodoItem } from '../../shared/types.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -96,6 +106,9 @@ async function runWorker(params: SpawnWorkerParams): Promise<WorkerResult> {
   const cwd = params.cwd?.trim() || process.cwd();
 
   console.log(`[Worker ${agentType}] Starting for task ${taskId}, cwd: "${cwd}"`);
+
+  // Register with agent controller for pause/resume support
+  const abortController = registerAgent(projectId, taskId, agentType);
 
   const systemPrompt = loadAgentPrompt(agentType);
 
@@ -207,6 +220,14 @@ When you're done, provide a brief summary of what you accomplished.`;
               savedArtifacts.push({ type: artifactInput.type, title: artifactInput.title });
             }
 
+            // Intercept TodoWrite tool calls and broadcast TODO updates
+            if (block.name === 'TodoWrite') {
+              const todoInput = block.input as { todos?: TodoItem[] };
+              if (todoInput.todos && Array.isArray(todoInput.todos)) {
+                updateAgentTodos(projectId, taskId, agentType, todoInput.todos);
+              }
+            }
+
             broadcastToProject(projectId, {
               type: 'agent_message',
               projectId,
@@ -291,6 +312,9 @@ When you're done, provide a brief summary of what you accomplished.`;
 
     console.log(`[Worker ${agentType}] Completed successfully. Artifacts: ${savedArtifacts.length}`);
 
+    // Unregister from agent controller
+    unregisterAgent(taskId);
+
     return {
       success: true,
       taskId,
@@ -298,6 +322,10 @@ When you're done, provide a brief summary of what you accomplished.`;
     };
   } catch (error) {
     console.error(`[Worker ${agentType}] Error:`, error);
+
+    // Unregister from agent controller
+    unregisterAgent(taskId);
+
     // Checkpoint with failed status
     await checkpointWorkerSession(taskId, projectId, agentType, sdkSessionId, 'failed');
 

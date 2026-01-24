@@ -1,17 +1,27 @@
 import { sqliteTable, text, integer, index } from 'drizzle-orm/sqlite-core';
 import { sql } from 'drizzle-orm';
 
+// Workspaces table - represents a local directory where projects are created
+export const workspaces = sqliteTable('workspaces', {
+  id: text('id').primaryKey(),
+  name: text('name').notNull(),
+  path: text('path').notNull(),
+  lastUsedAt: integer('last_used_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
+  createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
+});
+
 export const projects = sqliteTable('projects', {
   id: text('id').primaryKey(),
   name: text('name').notNull(),
   description: text('description'),
-  cwd: text('cwd'),
+  workspaceId: text('workspace_id').references(() => workspaces.id, { onDelete: 'cascade' }),
   status: text('status').default('idle'), // idle, running, waiting_approval, completed, failed
   emSessionId: text('em_session_id'), // Reference to EM's agent session
   createdAt: integer('created_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
   updatedAt: integer('updated_at', { mode: 'timestamp' }).default(sql`(unixepoch())`),
 }, (table) => [
   index('idx_projects_status').on(table.status),
+  index('idx_projects_workspace').on(table.workspaceId),
 ]);
 
 export const tasks = sqliteTable('tasks', {
@@ -83,6 +93,8 @@ export const timelineEvents = sqliteTable('timeline_events', {
 ]);
 
 // Type exports for use in application code
+export type Workspace = typeof workspaces.$inferSelect;
+export type NewWorkspace = typeof workspaces.$inferInsert;
 export type Project = typeof projects.$inferSelect;
 export type NewProject = typeof projects.$inferInsert;
 export type Task = typeof tasks.$inferSelect;

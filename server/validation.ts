@@ -15,6 +15,7 @@ const createProjectSchema = z.object({
   name: z.string().min(1),
   description: z.string().optional().default(''),
   cwd: z.string().optional(),
+  workspaceId: z.string().optional(),
   linearIssueKey: z.string().optional(),
 });
 
@@ -51,6 +52,43 @@ const resolveGateSchema = z.object({
   comment: z.string().optional(),
 });
 
+// Workspace message schemas
+const listWorkspacesSchema = z.object({
+  type: z.literal('list_workspaces'),
+});
+
+const createWorkspaceSchema = z.object({
+  type: z.literal('create_workspace'),
+  name: z.string().min(1),
+  path: z.string().min(1),
+});
+
+const deleteWorkspaceSchema = z.object({
+  type: z.literal('delete_workspace'),
+  workspaceId: z.string().min(1),
+});
+
+// Agent control message schemas
+const pauseAgentSchema = z.object({
+  type: z.literal('pause_agent'),
+  projectId: z.string().min(1),
+  taskId: z.string().min(1),
+});
+
+const resumeAgentSchema = z.object({
+  type: z.literal('resume_agent'),
+  projectId: z.string().min(1),
+  taskId: z.string().min(1),
+  message: z.string().optional(),
+});
+
+const sendAgentMessageSchema = z.object({
+  type: z.literal('send_agent_message'),
+  projectId: z.string().min(1),
+  taskId: z.string().min(1),
+  message: z.string().min(1),
+});
+
 // Union of all client message types
 export const clientMessageSchema = z.discriminatedUnion('type', [
   subscribeProjectSchema,
@@ -59,6 +97,12 @@ export const clientMessageSchema = z.discriminatedUnion('type', [
   listProjectsSchema,
   sendProjectMessageSchema,
   resolveGateSchema,
+  listWorkspacesSchema,
+  createWorkspaceSchema,
+  deleteWorkspaceSchema,
+  pauseAgentSchema,
+  resumeAgentSchema,
+  sendAgentMessageSchema,
 ]);
 
 export type ValidatedClientMessage = z.infer<typeof clientMessageSchema>;

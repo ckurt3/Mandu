@@ -4,7 +4,7 @@ import { readFileSync, existsSync } from 'fs';
 import { dirname, join } from 'path';
 import { fileURLToPath } from 'url';
 import { db } from '../db/client.js';
-import { tasks, gates, agentSessions, projects, artifacts } from '../db/schema.js';
+import { tasks, gates, agentSessions, projects, artifacts, workspaces } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
 import { spawnWorkerAgent } from './workerAgent.js';
 import { broadcastToProject } from '../websocket.js';
@@ -701,14 +701,17 @@ export async function runEMAgent(context: ProjectContext): Promise<void> {
   }
 }
 
-// Helper to get project cwd
+// Helper to get project cwd from workspace
 export async function getProjectCwd(projectId: string): Promise<string> {
-  const [project] = await db.select()
+  const result = await db.select({
+    workspacePath: workspaces.path,
+  })
     .from(projects)
+    .leftJoin(workspaces, eq(projects.workspaceId, workspaces.id))
     .where(eq(projects.id, projectId))
     .limit(1);
 
-  return project?.cwd || process.cwd();
+  return result[0]?.workspacePath || process.cwd();
 }
 
 // For external calls to send messages to an active EM

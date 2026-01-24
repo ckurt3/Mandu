@@ -8,15 +8,52 @@ export type GateStatus = 'pending' | 'approved' | 'rejected';
 export type ProjectStatus = 'idle' | 'running' | 'waiting_approval' | 'completed' | 'failed';
 export type ArtifactType = 'spec' | 'design_doc' | 'code_change' | 'test_report' | 'review' | 'markdown';
 
+// Diff types for code review
+export type DiffViewMode = 'line-by-line' | 'side-by-side';
+
+export interface DiffFile {
+  id: string;
+  filename: string;
+  oldPath: string | null;
+  newPath: string | null;
+  status: 'added' | 'deleted' | 'modified' | 'renamed';
+  additions: number;
+  deletions: number;
+}
+
+export interface Diff {
+  id: string;
+  projectId: string;
+  title: string;
+  description: string | null;
+  rawDiff: string; // The raw unified diff content
+  files: DiffFile[];
+  baseRef: string | null; // e.g., 'main', commit sha
+  headRef: string | null; // e.g., 'feature-branch', commit sha
+  createdAt: Date | null;
+}
+
+// Workspace types
+export interface Workspace {
+  id: string;
+  name: string;
+  path: string;
+  createdAt: Date | null;
+  updatedAt: Date | null;
+}
+
 // Frontend data models (using string IDs for JSON serialization)
 export interface Project {
   id: string;
   name: string;
   description: string | null;
   cwd: string | null;
+  workspaceId: string | null;
+  workspaceName: string | null;
   status: string | null;
   createdAt: Date | null;
   updatedAt: Date | null;
+  lastActivityAt: Date | null;
 }
 
 export interface Task {
@@ -122,13 +159,56 @@ export interface ResolveGateMessage {
   comment?: string;
 }
 
+// Workspace messages
+export interface ListWorkspacesMessage {
+  type: 'list_workspaces';
+}
+
+export interface CreateWorkspaceMessage {
+  type: 'create_workspace';
+  name: string;
+  path: string;
+}
+
+export interface DeleteWorkspaceMessage {
+  type: 'delete_workspace';
+  workspaceId: string;
+}
+
+// Agent control messages
+export interface PauseAgentMessage {
+  type: 'pause_agent';
+  projectId: string;
+  taskId: string; // The specific agent/task to pause
+}
+
+export interface ResumeAgentMessage {
+  type: 'resume_agent';
+  projectId: string;
+  taskId: string; // The specific agent/task to resume
+  message?: string; // Optional message to send on resume
+}
+
+export interface SendAgentMessageMessage {
+  type: 'send_agent_message';
+  projectId: string;
+  taskId: string; // The specific agent/task to send to
+  message: string;
+}
+
 export type ClientMessage =
   | SubscribeProjectMessage
   | UnsubscribeProjectMessage
   | CreateProjectMessage
   | ListProjectsMessage
   | SendProjectMessageMessage
-  | ResolveGateMessage;
+  | ResolveGateMessage
+  | ListWorkspacesMessage
+  | CreateWorkspaceMessage
+  | DeleteWorkspaceMessage
+  | PauseAgentMessage
+  | ResumeAgentMessage
+  | SendAgentMessageMessage;
 
 // Server -> Client messages
 export interface ProjectSubscribedMessage {
@@ -146,6 +226,8 @@ export interface ProjectCreatedMessage {
   projectId: string;
   name: string;
   description?: string;
+  workspaceId?: string;
+  workspaceName?: string | null;
 }
 
 export interface ProjectsListMessage {
@@ -155,6 +237,9 @@ export interface ProjectsListMessage {
     name: string;
     description: string | null;
     status: string | null;
+    workspaceId?: string | null;
+    workspaceName?: string | null;
+    lastActivityAt?: Date | null;
   }>;
 }
 
@@ -232,6 +317,55 @@ export interface EMWaitingMessage {
   projectId: string;
 }
 
+// Workspace server messages
+export interface WorkspacesListMessage {
+  type: 'workspaces_list';
+  workspaces: Workspace[];
+}
+
+export interface WorkspaceCreatedMessage {
+  type: 'workspace_created';
+  workspace: Workspace;
+}
+
+export interface WorkspaceDeletedMessage {
+  type: 'workspace_deleted';
+  workspaceId: string;
+}
+
+export interface WorkspaceErrorMessage {
+  type: 'workspace_error';
+  error: string;
+}
+
+// Agent status messages (server -> client)
+export interface AgentPausedMessage {
+  type: 'agent_paused';
+  projectId: string;
+  taskId: string;
+}
+
+export interface AgentResumedMessage {
+  type: 'agent_resumed';
+  projectId: string;
+  taskId: string;
+}
+
+// TODO state from TodoWrite tool
+export interface TodoItem {
+  content: string;
+  status: 'pending' | 'in_progress' | 'completed';
+  activeForm: string;
+}
+
+export interface AgentTodoUpdateMessage {
+  type: 'agent_todo_update';
+  projectId: string;
+  taskId: string;
+  agentType: string;
+  todos: TodoItem[];
+}
+
 export type ServerMessage =
   | ProjectSubscribedMessage
   | ProjectCreatedMessage
@@ -245,4 +379,11 @@ export type ServerMessage =
   | GateCreatedMessage
   | GateResolvedMessage
   | ArtifactCreatedMessage
-  | EMWaitingMessage;
+  | EMWaitingMessage
+  | WorkspacesListMessage
+  | WorkspaceCreatedMessage
+  | WorkspaceDeletedMessage
+  | WorkspaceErrorMessage
+  | AgentPausedMessage
+  | AgentResumedMessage
+  | AgentTodoUpdateMessage;

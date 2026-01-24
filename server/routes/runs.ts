@@ -1,8 +1,8 @@
 import { Router } from 'express';
 import { db } from '../db/client.js';
-import { projects, tasks, artifacts, gates, agentSessions } from '../db/schema.js';
+import { projects, tasks, artifacts, gates, agentSessions, workspaces } from '../db/schema.js';
 import { eq } from 'drizzle-orm';
-import { runEMAgent, resolveGate, sendMessageToEM } from '../orchestrator/emAgent.js';
+import { runEMAgent, resolveGate, sendMessageToEM, getProjectCwd } from '../orchestrator/emAgent.js';
 import { broadcastToProject } from '../websocket.js';
 import { randomUUID } from 'crypto';
 import { readSessionMessages, filterSystemMessages, type ParsedMessage } from '../sessionReader.js';
@@ -23,16 +23,23 @@ router.get('/projects', async (_req, res) => {
 // Create a new project
 router.post('/projects', async (req, res) => {
   try {
-    const { name, description, cwd } = req.body;
+    const { name, description, workspaceId } = req.body;
 
     const projectId = randomUUID();
     await db.insert(projects).values({
       id: projectId,
       name,
       description,
-      cwd: cwd || process.cwd(),
+      workspaceId: workspaceId || null,
       status: 'idle',
     });
+
+    // Update workspace lastUsedAt if workspaceId provided
+    if (workspaceId) {
+      await db.update(workspaces)
+        .set({ lastUsedAt: new Date() })
+        .where(eq(workspaces.id, workspaceId));
+    }
 
     res.json({ projectId, name });
   } catch (error) {
@@ -86,10 +93,11 @@ router.post('/projects/:projectId/message', async (req, res) => {
       await sendMessageToEM(projectId, message);
       res.json({ success: true, action: 'message_sent' });
     } else {
-      // Start new EM session
+      // Start new EM session - get workspace path
+      const projectCwd = await getProjectCwd(projectId);
       runEMAgent({
         projectId,
-        cwd: project.cwd || process.cwd(),
+        cwd: projectCwd,
         request: message,
       }).catch(err => {
         console.error(`EM Agent failed for project ${projectId}:`, err);
@@ -194,7 +202,7 @@ router.get('/project/:projectId/history', async (req, res) => {
     const limit = Math.min(parseInt(req.query.limit as string) || 50, 250);
     const before = parseInt(req.query.before as string) || 0;
 
-    // Get project for cwd
+    // Get project and its workspace for cwd
     const [project] = await db.select()
       .from(projects)
       .where(eq(projects.id, projectId));
@@ -203,7 +211,7 @@ router.get('/project/:projectId/history', async (req, res) => {
       return res.status(404).json({ error: 'Project not found' });
     }
 
-    const projectCwd = project.cwd || process.cwd();
+    const projectCwd = await getProjectCwd(projectId);
 
     // Get all agent sessions for this project
     const sessions = await db.select()

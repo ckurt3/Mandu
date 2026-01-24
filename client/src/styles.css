@@ -630,3 +630,521 @@ body {
   color: var(--color-orange);
   font-weight: 700;
 }
+
+/* Agent Card Animations */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInLeft {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+@keyframes pulseGlow {
+  0%, 100% {
+    box-shadow: 0 0 0 0 rgba(255, 140, 66, 0.4);
+  }
+  50% {
+    box-shadow: 0 0 0 8px rgba(255, 140, 66, 0);
+  }
+}
+
+.animate-fade-in-up {
+  animation: fadeInUp 0.3s ease-out;
+}
+
+.animate-slide-in-left {
+  animation: slideInLeft 0.25s ease-out;
+}
+
+.animate-slide-in-right {
+  animation: slideInRight 0.25s ease-out;
+}
+
+.animate-pulse-glow {
+  animation: pulseGlow 2s ease-in-out infinite;
+}
+
+/* Agent Card Status Colors */
+.agent-status-idle {
+  background-color: var(--color-text-muted);
+}
+
+.agent-status-working {
+  background-color: #3B82F6;
+}
+
+.agent-status-paused {
+  background-color: #FBBF24;
+}
+
+.agent-status-error {
+  background-color: var(--color-red);
+}
+
+/* Agent Card Hover Effects */
+.agent-card-hover:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+/* Progress Bar Animations */
+.progress-bar-animated {
+  transition: width 0.5s ease-out;
+}
+
+/* Line clamp utility */
+.line-clamp-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+/* ============================================
+   Diff2Html Styles - GitHub-like diff viewer
+   with dark mode support and commenting hooks
+   ============================================ */
+
+/* Import diff2html base styles */
+@import 'diff2html/bundles/css/diff2html.min.css';
+
+/* Wrapper container for diff content */
+.diff2html-wrapper {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  line-height: 20px;
+}
+
+/* Reset diff2html default styles that cause issues */
+.diff2html-wrapper .d2h-wrapper {
+  text-align: left;
+}
+
+.diff2html-wrapper .d2h-file-diff {
+  overflow-x: auto;
+}
+
+/* Fix line numbers to scroll with content - override diff2html defaults */
+.diff2html-wrapper .d2h-code-linenumber,
+.diff2html-wrapper .d2h-code-side-linenumber {
+  position: static !important;
+}
+
+.diff2html-wrapper .d2h-code-line {
+  padding-left: 0 !important;
+}
+
+
+/* ===== File Header Styling ===== */
+.d2h-file-wrapper {
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  margin: 16px;
+  overflow: hidden;
+  background: var(--color-bg-elevated);
+}
+
+.d2h-file-header {
+  background: var(--color-bg-secondary);
+  border-bottom: 1px solid var(--color-border);
+  padding: 10px 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.d2h-file-name-wrapper {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex: 1;
+}
+
+.d2h-file-name {
+  font-family: var(--font-mono);
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.d2h-file-stats {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.d2h-file-stats .d2h-lines-added {
+  color: var(--color-green);
+}
+
+.d2h-file-stats .d2h-lines-deleted {
+  color: var(--color-red);
+}
+
+/* ===== Code Diff Table Styling ===== */
+.d2h-diff-table {
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
+/* Line number columns */
+.d2h-code-linenumber {
+  color: var(--color-text-muted);
+  background: var(--color-bg-secondary);
+  border-right: 1px solid var(--color-border);
+  user-select: none;
+  cursor: pointer;
+  font-size: 11px;
+}
+
+/* Hover effect for line numbers (for future commenting) */
+.d2h-code-linenumber:hover {
+  background: var(--color-orange-glow);
+}
+
+/* Code content */
+.d2h-code-line-ctn {
+  white-space: pre;
+}
+
+/* Code line prefix (+/-/space) */
+.d2h-code-line-prefix {
+  color: var(--color-text-muted);
+  user-select: none;
+}
+
+/* ===== Side-by-Side View ===== */
+.d2h-code-side-linenumber {
+  color: var(--color-text-muted);
+  background: var(--color-bg-secondary);
+  border-right: 1px solid var(--color-border);
+  user-select: none;
+  font-size: 11px;
+}
+
+.d2h-code-side-line .d2h-code-line-ctn {
+  white-space: pre;
+}
+
+/* ===== Diff Colors - Addition (Green) ===== */
+.d2h-ins {
+  background-color: rgba(74, 222, 128, 0.15) !important;
+}
+
+.d2h-ins .d2h-code-line-ctn {
+  background-color: rgba(74, 222, 128, 0.15) !important;
+}
+
+.d2h-ins .d2h-code-linenumber,
+.d2h-ins .d2h-code-side-linenumber {
+  background-color: rgba(74, 222, 128, 0.2) !important;
+  color: var(--color-green) !important;
+}
+
+.d2h-ins.d2h-change {
+  background-color: rgba(74, 222, 128, 0.2) !important;
+}
+
+/* Inline addition highlight */
+ins.d2h-change {
+  background-color: rgba(74, 222, 128, 0.35);
+  text-decoration: none;
+}
+
+/* ===== Diff Colors - Deletion (Red) ===== */
+.d2h-del {
+  background-color: rgba(248, 113, 113, 0.15) !important;
+}
+
+.d2h-del .d2h-code-line-ctn {
+  background-color: rgba(248, 113, 113, 0.15) !important;
+}
+
+.d2h-del .d2h-code-linenumber,
+.d2h-del .d2h-code-side-linenumber {
+  background-color: rgba(248, 113, 113, 0.2) !important;
+  color: var(--color-red) !important;
+}
+
+.d2h-del.d2h-change {
+  background-color: rgba(248, 113, 113, 0.2) !important;
+}
+
+/* Inline deletion highlight */
+del.d2h-change {
+  background-color: rgba(248, 113, 113, 0.35);
+  text-decoration: none;
+}
+
+/* ===== Context/Unchanged Lines ===== */
+.d2h-cntx {
+  background: var(--color-bg-elevated) !important;
+}
+
+.d2h-cntx .d2h-code-linenumber,
+.d2h-cntx .d2h-code-side-linenumber {
+  background: var(--color-bg-secondary) !important;
+}
+
+.d2h-cntx .d2h-code-line-ctn {
+  background: var(--color-bg-elevated) !important;
+}
+
+/* ===== Info/Hunk Headers (e.g., @@ -1,5 +1,7 @@) ===== */
+.d2h-info {
+  background: var(--color-bg-secondary) !important;
+  color: var(--color-text-muted) !important;
+  font-size: 11px;
+}
+
+
+/* ===== Empty/Placeholder Cells ===== */
+.d2h-code-side-emptyplaceholder,
+.d2h-emptyplaceholder {
+  background-color: var(--color-bg-primary);
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 4px,
+    var(--color-border) 4px,
+    var(--color-border) 5px
+  );
+}
+
+/* ===== Syntax Highlighting (inherited from highlight.js) ===== */
+.d2h-code-line-ctn .hljs-keyword,
+.d2h-code-line-ctn .hljs-selector-tag,
+.d2h-code-line-ctn .hljs-literal,
+.d2h-code-line-ctn .hljs-section,
+.d2h-code-line-ctn .hljs-link {
+  color: #ff79c6;
+}
+
+.d2h-code-line-ctn .hljs-string,
+.d2h-code-line-ctn .hljs-title,
+.d2h-code-line-ctn .hljs-name,
+.d2h-code-line-ctn .hljs-type,
+.d2h-code-line-ctn .hljs-attribute,
+.d2h-code-line-ctn .hljs-symbol,
+.d2h-code-line-ctn .hljs-bullet,
+.d2h-code-line-ctn .hljs-addition,
+.d2h-code-line-ctn .hljs-variable,
+.d2h-code-line-ctn .hljs-template-tag,
+.d2h-code-line-ctn .hljs-template-variable {
+  color: #f1fa8c;
+}
+
+.d2h-code-line-ctn .hljs-comment,
+.d2h-code-line-ctn .hljs-quote,
+.d2h-code-line-ctn .hljs-deletion,
+.d2h-code-line-ctn .hljs-meta {
+  color: #6272a4;
+}
+
+.d2h-code-line-ctn .hljs-keyword,
+.d2h-code-line-ctn .hljs-selector-tag,
+.d2h-code-line-ctn .hljs-literal,
+.d2h-code-line-ctn .hljs-doctag,
+.d2h-code-line-ctn .hljs-title,
+.d2h-code-line-ctn .hljs-section,
+.d2h-code-line-ctn .hljs-type,
+.d2h-code-line-ctn .hljs-selector-id {
+  font-weight: bold;
+}
+
+.d2h-code-line-ctn .hljs-number {
+  color: #bd93f9;
+}
+
+.d2h-code-line-ctn .hljs-regexp,
+.d2h-code-line-ctn .hljs-attr {
+  color: #50fa7b;
+}
+
+.d2h-code-line-ctn .hljs-built_in,
+.d2h-code-line-ctn .hljs-class .hljs-title {
+  color: #8be9fd;
+}
+
+/* ===== Light Theme Overrides ===== */
+[data-theme="light"] .d2h-file-wrapper {
+  background: var(--color-bg-secondary);
+}
+
+[data-theme="light"] .d2h-file-header {
+  background: var(--color-bg-elevated);
+}
+
+[data-theme="light"] .d2h-ins {
+  background-color: rgba(34, 197, 94, 0.15);
+}
+
+[data-theme="light"] .d2h-ins .d2h-code-line-ctn {
+  background-color: rgba(34, 197, 94, 0.15);
+}
+
+[data-theme="light"] .d2h-ins .d2h-code-linenumber {
+  background-color: rgba(34, 197, 94, 0.2);
+}
+
+[data-theme="light"] ins.d2h-change {
+  background-color: rgba(34, 197, 94, 0.35);
+}
+
+[data-theme="light"] .d2h-del {
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
+[data-theme="light"] .d2h-del .d2h-code-line-ctn {
+  background-color: rgba(239, 68, 68, 0.15);
+}
+
+[data-theme="light"] .d2h-del .d2h-code-linenumber {
+  background-color: rgba(239, 68, 68, 0.2);
+}
+
+[data-theme="light"] del.d2h-change {
+  background-color: rgba(239, 68, 68, 0.35);
+}
+
+[data-theme="light"] .d2h-cntx {
+  background: var(--color-bg-secondary);
+}
+
+[data-theme="light"] .d2h-code-linenumber {
+  background: var(--color-bg-elevated);
+}
+
+/* Light theme syntax highlighting */
+[data-theme="light"] .d2h-code-line-ctn .hljs-keyword,
+[data-theme="light"] .d2h-code-line-ctn .hljs-selector-tag {
+  color: #d73a49;
+}
+
+[data-theme="light"] .d2h-code-line-ctn .hljs-string,
+[data-theme="light"] .d2h-code-line-ctn .hljs-title {
+  color: #032f62;
+}
+
+[data-theme="light"] .d2h-code-line-ctn .hljs-comment {
+  color: #6a737d;
+}
+
+[data-theme="light"] .d2h-code-line-ctn .hljs-number {
+  color: #005cc5;
+}
+
+[data-theme="light"] .d2h-code-line-ctn .hljs-built_in {
+  color: #22863a;
+}
+
+/* ===== Collapsed/Expandable Diff Sections ===== */
+.d2h-collapsed {
+  border: 1px dashed var(--color-border);
+  background: var(--color-bg-secondary);
+  padding: 8px 16px;
+  text-align: center;
+  font-size: 11px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.d2h-collapsed:hover {
+  background: var(--color-bg-hover);
+  border-color: var(--color-orange);
+  color: var(--color-orange);
+}
+
+/* ===== Scrollbar for Diff Content ===== */
+/* Note: Don't use display:block on tbody as it breaks table layout */
+.d2h-diff-tbody {
+  /* overflow handled at table/wrapper level */
+}
+
+/* ===== Animation for Loading Diffs ===== */
+@keyframes diffFadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.d2h-file-wrapper {
+  animation: diffFadeIn 0.2s ease-out;
+}
+
+/* Staggered animation for multiple files */
+.d2h-file-wrapper:nth-child(1) { animation-delay: 0ms; }
+.d2h-file-wrapper:nth-child(2) { animation-delay: 50ms; }
+.d2h-file-wrapper:nth-child(3) { animation-delay: 100ms; }
+.d2h-file-wrapper:nth-child(4) { animation-delay: 150ms; }
+.d2h-file-wrapper:nth-child(5) { animation-delay: 200ms; }
+
+/* ===== Future: Comment Thread Placeholder ===== */
+/* These classes will be used when implementing inline comments */
+.diff-comment-thread {
+  background: var(--color-bg-elevated);
+  border: 1px solid var(--color-border);
+  border-left: 3px solid var(--color-orange);
+  border-radius: 0 6px 6px 0;
+  margin: 4px 16px;
+  padding: 12px;
+}
+
+.diff-comment-add-btn {
+  position: absolute;
+  left: -8px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  background: var(--color-orange);
+  color: white;
+  border: none;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: bold;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+.d2h-code-linenumber:hover .diff-comment-add-btn {
+  opacity: 1;
+}

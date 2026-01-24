@@ -1,15 +1,24 @@
 import { useEffect, useRef, useState, useCallback } from 'react';
-import type { AgentState, ServerMessage, ChatMessage, Project, Task, Gate, Artifact, MessagePayload, AgentMessageMessage, GateResolvedMessage } from '@shared/types';
+import type { AgentState, ServerMessage, ChatMessage, Project, Task, Gate, Artifact, Workspace, MessagePayload, AgentMessageMessage, GateResolvedMessage, TodoItem, AgentPausedMessage, AgentResumedMessage, AgentTodoUpdateMessage } from '@shared/types';
+
+// Extended agent state with pause/todo info
+export interface ExtendedAgentState extends AgentState {
+  isPaused?: boolean;
+  todos?: TodoItem[];
+  queuedMessages?: string[];
+}
 
 export function useWebSocket() {
   const wsRef = useRef<WebSocket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
-  const [agents, setAgents] = useState<Map<string, AgentState>>(new Map());
+  const [agents, setAgents] = useState<Map<string, ExtendedAgentState>>(new Map());
   const [projects, setProjects] = useState<Project[]>([]);
   const [tasks, setTasks] = useState<Task[]>([]);
   const [gates, setGates] = useState<Gate[]>([]);
   const [artifacts, setArtifacts] = useState<Artifact[]>([]);
+  const [workspaces, setWorkspaces] = useState<Workspace[]>([]);
   const [subscribedProjectId, setSubscribedProjectId] = useState<string | null>(null);
+  const [latestCreatedProjectId, setLatestCreatedProjectId] = useState<string | null>(null);
 
   // Connect to WebSocket
   useEffect(() => {
@@ -24,8 +33,9 @@ export function useWebSocket() {
     ws.onopen = () => {
       setIsConnected(true);
       console.log('WebSocket connected');
-      // Request project list on connect
+      // Request project list and workspaces on connect
       ws.send(JSON.stringify({ type: 'list_projects' }));
+      ws.send(JSON.stringify({ type: 'list_workspaces' }));
     };
 
     ws.onclose = () => {
@@ -61,9 +71,12 @@ export function useWebSocket() {
             name: p.name,
             description: p.description,
             cwd: null,
+            workspaceId: (p as { workspaceId?: string }).workspaceId || null,
+            workspaceName: (p as { workspaceName?: string }).workspaceName || null,
             status: p.status,
             createdAt: null,
             updatedAt: null,
+            lastActivityAt: (p as { lastActivityAt?: Date }).lastActivityAt || null,
           })));
         }
         break;
@@ -80,12 +93,17 @@ export function useWebSocket() {
               name: message.name!,
               description: message.description || null,
               cwd: null,
+              workspaceId: (message as { workspaceId?: string }).workspaceId || null,
+              workspaceName: (message as { workspaceName?: string }).workspaceName || null,
               status: 'running',
               createdAt: new Date(),
               updatedAt: new Date(),
+              lastActivityAt: new Date(),
             };
             return [...prev, newProject];
           });
+          // Track newly created project for auto-selection
+          setLatestCreatedProjectId(message.projectId!);
         }
         break;
 
@@ -507,11 +525,105 @@ export function useWebSocket() {
         }
         break;
       }
+
+      // Workspace messages
+      case 'workspaces_list':
+        if ((message as { workspaces?: Workspace[] }).workspaces) {
+          setWorkspaces((message as { workspaces: Workspace[] }).workspaces);
+        }
+        break;
+
+      case 'workspace_created':
+        if ((message as { workspace?: Workspace }).workspace) {
+          const newWorkspace = (message as { workspace: Workspace }).workspace;
+          setWorkspaces(prev => {
+            // Check if already exists
+            if (prev.some(w => w.id === newWorkspace.id)) {
+              return prev;
+            }
+            return [...prev, newWorkspace];
+          });
+        }
+        break;
+
+      case 'workspace_deleted':
+        if ((message as { workspaceId?: string }).workspaceId) {
+          const workspaceId = (message as { workspaceId: string }).workspaceId;
+          setWorkspaces(prev => prev.filter(w => w.id !== workspaceId));
+        }
+        break;
+
+      case 'workspace_error':
+        // Workspace errors are logged for now, could be surfaced to UI
+        console.error('Workspace error:', (message as { error?: string }).error);
+        break;
+
+      // Agent control messages
+      case 'agent_paused': {
+        const evt = message as AgentPausedMessage;
+        // Build agent ID - for EM it's em-{projectId}, for workers it's {agentType}-{taskId}
+        // The taskId in the message is actually the task-specific ID
+        const task = tasks.find(t => t.id === evt.taskId);
+        const agentId = task
+          ? `${task.agentType}-${evt.taskId}`
+          : `em-${evt.projectId}`;
+
+        setAgents(prev => {
+          const updated = new Map(prev);
+          const agent = updated.get(agentId);
+          if (agent) {
+            updated.set(agentId, { ...agent, isPaused: true, status: 'idle' });
+          }
+          return updated;
+        });
+        break;
+      }
+
+      case 'agent_resumed': {
+        const evt = message as AgentResumedMessage;
+        const task = tasks.find(t => t.id === evt.taskId);
+        const agentId = task
+          ? `${task.agentType}-${evt.taskId}`
+          : `em-${evt.projectId}`;
+
+        setAgents(prev => {
+          const updated = new Map(prev);
+          const agent = updated.get(agentId);
+          if (agent) {
+            updated.set(agentId, {
+              ...agent,
+              isPaused: false,
+              status: 'thinking',
+              queuedMessages: [] // Clear queued messages on resume
+            });
+          }
+          return updated;
+        });
+        break;
+      }
+
+      case 'agent_todo_update': {
+        const evt = message as AgentTodoUpdateMessage;
+        const agentId = evt.taskId
+          ? `${evt.agentType}-${evt.taskId}`
+          : `em-${evt.projectId}`;
+
+        setAgents(prev => {
+          const updated = new Map(prev);
+          let agent = updated.get(agentId);
+          if (!agent) {
+            agent = { id: agentId, status: 'thinking', messages: [], todos: [] };
+          }
+          updated.set(agentId, { ...agent, todos: evt.todos });
+          return updated;
+        });
+        break;
+      }
     }
-  }, [subscribedProjectId]);
+  }, [subscribedProjectId, tasks]);
 
   // Project operations
-  const createProject = useCallback((name: string, description: string, cwd: string, linearIssueKey?: string) => {
+  const createProject = useCallback((name: string, description: string, cwd: string, linearIssueKey?: string, workspaceId?: string) => {
     if (wsRef.current?.readyState === WebSocket.OPEN) {
       wsRef.current.send(JSON.stringify({
         type: 'create_project',
@@ -519,6 +631,7 @@ export function useWebSocket() {
         description,
         cwd,
         linearIssueKey,
+        workspaceId,
       }));
     }
   }, []);
@@ -614,6 +727,105 @@ export function useWebSocket() {
     });
   }, []);
 
+  // Workspace operations
+  const createWorkspace = useCallback((name: string, path: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'create_workspace',
+        name,
+        path,
+      }));
+    }
+  }, []);
+
+  const deleteWorkspace = useCallback((workspaceId: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'delete_workspace',
+        workspaceId,
+      }));
+    }
+  }, []);
+
+  // Agent control operations
+  const pauseAgent = useCallback((projectId: string, taskId: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'pause_agent',
+        projectId,
+        taskId,
+      }));
+    }
+  }, []);
+
+  const resumeAgent = useCallback((projectId: string, taskId: string, message?: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      wsRef.current.send(JSON.stringify({
+        type: 'resume_agent',
+        projectId,
+        taskId,
+        message,
+      }));
+    }
+  }, []);
+
+  const sendAgentMessage = useCallback((projectId: string, taskId: string, message: string) => {
+    if (wsRef.current?.readyState === WebSocket.OPEN) {
+      // Check if agent is paused - if so, queue the message locally
+      const task = tasks.find(t => t.id === taskId);
+      const agentId = task
+        ? `${task.agentType}-${taskId}`
+        : `em-${projectId}`;
+
+      const agent = agents.get(agentId);
+      if (agent?.isPaused) {
+        // Queue message locally
+        setAgents(prev => {
+          const updated = new Map(prev);
+          const currentAgent = updated.get(agentId);
+          if (currentAgent) {
+            const queuedMessages = currentAgent.queuedMessages || [];
+            updated.set(agentId, {
+              ...currentAgent,
+              queuedMessages: [...queuedMessages, message]
+            });
+          }
+          return updated;
+        });
+        return;
+      }
+
+      // Send message immediately
+      wsRef.current.send(JSON.stringify({
+        type: 'send_agent_message',
+        projectId,
+        taskId,
+        message,
+      }));
+
+      // Add to local messages for immediate UI feedback
+      setAgents(prev => {
+        const updated = new Map(prev);
+        let currentAgent = updated.get(agentId);
+        if (!currentAgent) {
+          currentAgent = { id: agentId, status: 'thinking', messages: [] };
+        }
+        const userMessage: ChatMessage = {
+          id: `${Date.now()}-user`,
+          role: 'user',
+          content: message,
+          timestamp: Date.now(),
+        };
+        updated.set(agentId, {
+          ...currentAgent,
+          status: 'thinking',
+          messages: [...currentAgent.messages, userMessage],
+        });
+        return updated;
+      });
+    }
+  }, [agents, tasks]);
+
   return {
     isConnected,
     // Agent support
@@ -624,11 +836,20 @@ export function useWebSocket() {
     gates,
     artifacts,
     subscribedProjectId,
+    latestCreatedProjectId,
     createProject,
     subscribeToProject,
     sendProjectMessage,
     resolveGate,
     addLocalMessage,
+    // Workspace support
+    workspaces,
+    createWorkspace,
+    deleteWorkspace,
+    // Agent control
+    pauseAgent,
+    resumeAgent,
+    sendAgentMessage,
     // Helper to get agent by id
     getAgent: (id: string) => agents.get(id),
   };

@@ -1,10 +1,18 @@
 import { ArtifactsDropdownButton } from './ArtifactsDropdownButton';
 import { ArtifactsDropdown } from './ArtifactsDropdown';
+import { GatesDropdownButton } from './GatesDropdownButton';
+import { GatesDropdown } from './GatesDropdown';
+import { DiffsDropdownButton } from './DiffsDropdownButton';
+import { DiffsDropdown } from './DiffsDropdown';
 import { useArtifacts } from '../../contexts/ArtifactsContext';
-import type { Artifact } from '@shared/types';
+import { useGates } from '../../contexts/GatesContext';
+import { useDiffs } from '../../contexts/DiffsContext';
+import type { Artifact, Gate } from '@shared/types';
 
 interface CenterTopBarProps {
   artifacts: Artifact[];
+  gates: Gate[];
+  diffs: import('@shared/types').Diff[]; // From context now, but keeping for dropdown
   isMenuOpen: boolean;
   onToggleMenu: () => void;
   isRightPaneOpen: boolean;
@@ -13,12 +21,16 @@ interface CenterTopBarProps {
 
 export function CenterTopBar({
   artifacts,
+  gates,
+  diffs,
   isMenuOpen,
   onToggleMenu,
   isRightPaneOpen,
   onToggleRightPane,
 }: CenterTopBarProps) {
-  const { isDropdownOpen, selectedArtifact, closeDropdown, selectArtifact } = useArtifacts();
+  const { isDropdownOpen: isArtifactsDropdownOpen, selectedArtifact, closeDropdown: closeArtifactsDropdown, selectArtifact } = useArtifacts();
+  const { isDropdownOpen: isGatesDropdownOpen, selectedGate, closeDropdown: closeGatesDropdown, selectGate } = useGates();
+  const { isDropdownOpen: isDiffsDropdownOpen, selectedDiff, closeDropdown: closeDiffsDropdown, selectDiff, diffs: contextDiffs } = useDiffs();
 
   return (
     <div className="relative h-[52px] px-3 flex items-center justify-between border-b border-border flex-shrink-0" style={{ background: 'linear-gradient(90deg, transparent 0%, rgba(255,140,66,0.05) 50%, transparent 100%)' }}>
@@ -36,6 +48,7 @@ export function CenterTopBar({
             <span className="text-xs font-bold">Mandu</span>
           </button>
         )}
+        {/* Back button for artifact viewer */}
         {selectedArtifact && (
           <button
             onClick={() => selectArtifact(null)}
@@ -47,16 +60,76 @@ export function CenterTopBar({
             Back
           </button>
         )}
+        {/* Back button for gate viewer */}
+        {selectedGate && !selectedArtifact && (
+          <button
+            onClick={() => selectGate(null)}
+            className="text-xs text-text-muted hover:text-orange transition-colors flex items-center gap-1"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+          </button>
+        )}
+        {/* Back button for diff viewer */}
+        {selectedDiff && !selectedArtifact && !selectedGate && (
+          <button
+            onClick={() => selectDiff(null)}
+            className="text-xs text-text-muted hover:text-[#10B981] transition-colors flex items-center gap-1"
+          >
+            <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            Back
+          </button>
+        )}
       </div>
 
-      {/* Center - Artifacts dropdown button */}
-      <div className="flex items-center gap-2">
+      {/* Center - Artifacts, Gates, and Diffs dropdown buttons */}
+      <div className="flex items-center gap-2 relative">
         {selectedArtifact ? (
           <span className="text-sm font-semibold text-[#A78BFA] truncate max-w-[200px]">
             {selectedArtifact.title}
           </span>
+        ) : selectedGate ? (
+          <span className="text-sm font-semibold text-orange truncate max-w-[200px]">
+            {selectedGate.title}
+          </span>
+        ) : selectedDiff ? (
+          <span className="text-sm font-semibold text-[#10B981] truncate max-w-[200px]">
+            {selectedDiff.title}
+          </span>
         ) : (
-          <ArtifactsDropdownButton count={artifacts.length} />
+          <>
+            <ArtifactsDropdownButton count={artifacts.length} />
+            <GatesDropdownButton gates={gates} />
+            <DiffsDropdownButton />
+          </>
+        )}
+
+        {/* Artifacts dropdown menu */}
+        {isArtifactsDropdownOpen && (
+          <ArtifactsDropdown
+            artifacts={artifacts}
+            onClose={closeArtifactsDropdown}
+          />
+        )}
+
+        {/* Gates dropdown menu */}
+        {isGatesDropdownOpen && (
+          <GatesDropdown
+            gates={gates}
+            onClose={closeGatesDropdown}
+          />
+        )}
+
+        {/* Diffs dropdown menu */}
+        {isDiffsDropdownOpen && (
+          <DiffsDropdown
+            diffs={contextDiffs}
+            onClose={closeDiffsDropdown}
+          />
         )}
       </div>
 
@@ -75,14 +148,6 @@ export function CenterTopBar({
           </button>
         )}
       </div>
-
-      {/* Dropdown menu */}
-      {isDropdownOpen && (
-        <ArtifactsDropdown
-          artifacts={artifacts}
-          onClose={closeDropdown}
-        />
-      )}
     </div>
   );
 }
