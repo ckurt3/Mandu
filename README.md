@@ -110,36 +110,6 @@ npm start
 
 Server runs on http://localhost:3000
 
-## Project Structure
-
-```
-mandu/
-├── server/
-│   ├── index.ts           # Express + WebSocket entry
-│   ├── sessionManager.ts  # Claude Agent SDK sessions
-│   ├── orchestrator/
-│   │   ├── emAgent.ts     # Event-driven Engineering Manager
-│   │   ├── workerAgent.ts # Specialist agent spawning
-│   │   └── types.ts       # Orchestration types
-│   ├── agents/
-│   │   ├── em.md          # EM system prompt
-│   │   ├── pm.md          # PM system prompt
-│   │   └── ...            # Other agent prompts
-│   └── db/
-│       ├── client.ts      # SQLite connection (better-sqlite3)
-│       └── schema.ts      # Drizzle ORM schema
-├── client/
-│   └── src/
-│       ├── App.tsx        # Main app with project management
-│       ├── components/
-│       │   └── TeamChat.tsx  # Chat interface
-│       └── hooks/
-│           └── useWebSocket.ts
-├── shared/
-│   └── types.ts           # Shared WebSocket message types
-└── .env                   # Environment variables (git ignored)
-```
-
 ## Tech Stack
 
 - **Backend**: Node.js, Express, WebSocket (ws)
@@ -150,8 +120,4 @@ mandu/
 
 ## License
 
-AGPL-3.0
-
----
-
-Originally built for the MongoDB AI Agents Hackathon, now running on SQLite for zero-config local development.
+**FSL-1.1-ALv2**
