@@ -120,4 +120,4 @@ Server runs on http://localhost:3000
 
 ## License
 
-**FSL-1.1-ALv2**
+**MIT**
