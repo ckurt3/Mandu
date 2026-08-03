@@ -6,9 +6,9 @@ A multi-agent orchestration system built with the [Claude Agent SDK](https://git
 
 ## Demo
 
-[![Watch Mandu - Hackathon 2026](https://i.ytimg.com/vi/psXW4O0AIIE/hqdefault.jpg)](https://www.youtube.com/watch?v=psXW4O0AIIE&t=584s)
+[![Watch Mandu - Hackathon 2026](https://i.ytimg.com/vi/psXW4O0AIIE/hqdefault.jpg)](https://www.youtube.com/watch?v=psXW4O0AIIE)
 
-[Watch the Mandu demo on YouTube (starts at 9:44)](https://www.youtube.com/watch?v=psXW4O0AIIE&t=584s)
+[Watch the Mandu demo on YouTube](https://www.youtube.com/watch?v=psXW4O0AIIE)
 
 ## How It Works
 
