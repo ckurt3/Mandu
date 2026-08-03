@@ -4,6 +4,12 @@ Your dev team. All wrapped together.
 
 A multi-agent orchestration system built with the [Claude Agent SDK](https://github.com/anthropics/claude-agent-sdk). Mandu coordinates a team of specialized AI agents to handle software development tasks—from requirements to pull request.
 
+## Demo
+
+[![Watch Mandu - Hackathon 2026](https://i.ytimg.com/vi/psXW4O0AIIE/hqdefault.jpg)](https://www.youtube.com/watch?v=psXW4O0AIIE&t=584s)
+
+[Watch the Mandu demo on YouTube (starts at 9:44)](https://www.youtube.com/watch?v=psXW4O0AIIE&t=584s)
+
 ## How It Works
 
 You chat with an **Engineering Manager (EM)** agent who orchestrates a team of specialists:
